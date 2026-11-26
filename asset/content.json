@@ -1,1 +1,151 @@
-
+{
+  "_huong_dan": [
+    "File này chứa nội dung phần kết quả. Sửa bằng tay, nhớ giữ dấu ngoặc kép và dấu phẩy.",
+    "images: ảnh nằm trong thư mục asset/. preview là ảnh màn hình đầu (asset/preview.png). card là hình trên thẻ (asset/kevin.png), ava là ảnh đại diện cạnh lời nhận xét (asset/kevin_ava.png), {id} được thay bằng id nhân vật. Nhân vật nhiều giai đoạn có thể thêm ảnh riêng từng giai đoạn là asset/kevin_1.png, asset/kevin_2.png (không có thì dùng asset/kevin.png). ext là đuôi ảnh, đổi thành jpg hoặc webp nếu cần.",
+    "counter: đếm số người ra cùng kết quả. Đặt enabled thành false để tắt. namespace đặt tên riêng cho quiz của bạn để không trùng người khác.",
+    "characters: mỗi nhân vật có color (mã màu #rrggbb, đổi theme thẻ và trang kết quả theo màu này), blurb (đoạn nhỏ dưới tên trên thẻ, để trống thì ẩn) và say (danh sách lời nhận xét, mỗi lần ra thẻ hiện ngẫu nhiên một câu).",
+    "blurb có thể là một chuỗi, hoặc danh sách theo giai đoạn nếu nhân vật có nhiều giai đoạn (ví dụ Kevin: [“lúc ban đầu”, “sau biến cố”]).",
+    "say có thể có hai câu hoặc nhiều hơn. Câu để trống sẽ bị bỏ qua. Nếu cả hai đều trống, thẻ hiện dòng chữ giữ chỗ.",
+    "Dòng _ten chỉ để bạn dễ nhìn, quiz không đọc."
+  ],
+  "images": {
+    "dir": "asset/",
+    "ext": "png",
+    "preview": "preview",
+    "card": "{id}",
+    "ava": "{id}_ava"
+  },
+  "counter": {
+    "enabled": true,
+    "url": "https://abacus.jasoncameron.dev",
+    "namespace": "quiz-13-anh-kiet"
+  },
+  "characters": {
+    "kevin": {
+      "_ten": "Kevin",
+      "color": "#ddb75f",
+      "blurb": "",
+      "say": [
+        "",
+        ""
+      ]
+    },
+    "elysia": {
+      "_ten": "Elysia",
+      "color": "#dd5f94",
+      "blurb": "",
+      "say": [
+        "",
+        ""
+      ]
+    },
+    "aponia": {
+      "_ten": "Aponia",
+      "color": "#5fa9dd",
+      "blurb": "",
+      "say": [
+        "",
+        ""
+      ]
+    },
+    "eden": {
+      "_ten": "Eden",
+      "color": "#9a5fdd",
+      "blurb": "",
+      "say": [
+        "",
+        ""
+      ]
+    },
+    "villv": {
+      "_ten": "Vill-V",
+      "color": "#dd925f",
+      "blurb": "",
+      "say": [
+        "",
+        ""
+      ]
+    },
+    "kalpas": {
+      "_ten": "Kalpas",
+      "color": "#dd9e5f",
+      "blurb": "",
+      "say": [
+        "",
+        ""
+      ]
+    },
+    "su": {
+      "_ten": "Su",
+      "color": "#5fddb3",
+      "blurb": "",
+      "say": [
+        "",
+        ""
+      ]
+    },
+    "sakura": {
+      "_ten": "SAKURA",
+      "color": "#dd5f74",
+      "blurb": "",
+      "say": [
+        "",
+        ""
+      ]
+    },
+    "kosma": {
+      "_ten": "Kosma",
+      "color": "#5fbedd",
+      "blurb": "",
+      "say": [
+        "",
+        ""
+      ]
+    },
+    "mobius": {
+      "_ten": "Mobius",
+      "color": "#be5fdd",
+      "blurb": "",
+      "say": [
+        "",
+        ""
+      ]
+    },
+    "griseo": {
+      "_ten": "Griseo",
+      "color": "#ddcc5f",
+      "blurb": "",
+      "say": [
+        "",
+        ""
+      ]
+    },
+    "hua": {
+      "_ten": "Hua",
+      "color": "#dd705f",
+      "blurb": "",
+      "say": [
+        "",
+        ""
+      ]
+    },
+    "pardo": {
+      "_ten": "Pardofelis",
+      "color": "#ddaf5f",
+      "blurb": "",
+      "say": [
+        "",
+        ""
+      ]
+    },
+    "none": {
+      "_ten": "Không giống ai",
+      "color": "#745fdd",
+      "blurb": "",
+      "say": [
+        "",
+        ""
+      ]
+    }
+  }
+}
