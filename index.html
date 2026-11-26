@@ -350,6 +350,43 @@ window.QUIZ_MAIN = function () {
       show(n);
     }, function () { m.id = old; tallySave(); });
   }
+  // ===== Cân bằng mềm theo thống kê thật =====
+  // Nhân vật nào ra nhiều hơn mức trần trong BAL_T thì bị trừ vài điểm; ra ít hơn thì để yên (không bao giờ được cộng).
+  // Chỉ bắt đầu từ ~100 lượt, tăng dần đến đủ mức ở ~200 lượt, và bị chặn trên (cap) nên không bao giờ đẩy mạnh.
+  // Cùng một bộ đáp án và cùng số liệu thì luôn ra cùng kết quả (không tung xúc xắc).
+  // Chỉnh bằng khối "balance" trong data.html (không bắt buộc), mặc định như dưới.
+  var BAL = D.balance || {};
+  var BAL_T = BAL.targets || { kosma: 20.5, aponia: 17 };   // mức trần % lượt ra kết quả: vượt mức này mới bị trừ
+  var BAL_FROM = BAL.from == null ? 100 : +BAL.from, BAL_FULL = BAL.full == null ? 200 : +BAL.full;
+  var BAL_K = BAL.k == null ? 0.6 : +BAL.k, BAL_CAP = BAL.cap == null ? 3 : +BAL.cap;   // điểm trừ cho mỗi 1% vượt, và mức trừ tối đa
+  var balAdj = null;
+  function balanceCalib() {
+    if (!balAdj) return null;
+    var bias = {}, k;
+    for (k in D.calibration.bias) bias[k] = D.calibration.bias[k];
+    for (k in balAdj) bias[k] = (bias[k] || 0) + balAdj[k];
+    return { bias: bias, T: D.calibration.T };
+  }
+  function balanceLoad() {
+    if ((CT.counter || {}).enabled === false) return;
+    var ids = D.characters.map(function (c) { return c.id; }).concat("none"), n = {}, left = ids.length, bad = false;
+    function fin() {
+      if (--left) return;
+      if (bad) return; // thiếu số liệu thì thôi, không chỉnh gì
+      var total = 0, adj = {}, k;
+      ids.forEach(function (id) { total += n[id] || 0; });
+      var ramp = BAL_FULL > BAL_FROM ? Math.max(0, Math.min(1, (total - BAL_FROM) / (BAL_FULL - BAL_FROM))) : (total >= BAL_FROM ? 1 : 0);
+      for (k in BAL_T) {
+        if (!total || !(k in n)) continue;
+        var d = (BAL_T[k] - n[k] / total * 100) * BAL_K;
+        adj[k] = Math.round(Math.max(-BAL_CAP, Math.min(0, d)) * ramp * 100) / 100; // chỉ trừ, không bao giờ cộng
+      }
+      balAdj = adj;
+    }
+    ids.forEach(function (id) {
+      counter("get", "kq-" + id, function (v) { n[id] = v; fin(); }, function () { bad = true; fin(); });
+    });
+  }
   var stats = { views: null, results: null };
   function drawStats() {
     var box = document.getElementById("stats"); if (!box) return;
@@ -436,7 +473,7 @@ window.QUIZ_MAIN = function () {
     cur = 0; multiSel = []; done = null;
   }
   function start() { reset(); intro(); }
-  function restart() { clearSave(); start(); }
+  function restart() { clearSave(); start(); balanceLoad(); }
 
   // Ảnh mở đầu có viền trong suốt thì cắt phần viền khi hiển thị, để góc bo ôm khít ảnh (không sửa file)
   function fitIntro(img) {
@@ -623,7 +660,7 @@ window.QUIZ_MAIN = function () {
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeCard(); });
 
   function result() {
-    var R = E.evaluate(D, answers);
+    var R = E.evaluate(D, answers, balanceCalib());
     var qs = E.tbNeeded ? E.tbNeeded(D, R) : [];
     if (!qs.length) return showResult(R);
     tbAsk(R, qs, 0, []);
@@ -631,7 +668,7 @@ window.QUIZ_MAIN = function () {
 
   // Tính lại kết quả từ đáp án (và câu phụ) đã lưu
   function showSaved() {
-    var R = E.evaluate(D, answers), qs = E.tbNeeded ? E.tbNeeded(D, R) : [];
+    var R = E.evaluate(D, answers, balanceCalib()), qs = E.tbNeeded ? E.tbNeeded(D, R) : [];
     if (!qs.length) return showResult(R);
     if (done.tb && done.tb.length === qs.length) return showResult(E.tbApply(D, R, qs, done.tb), done.tb);
     done = null; tbAsk(R, qs, 0, []); // câu phụ đã thay đổi thì hỏi lại
@@ -752,6 +789,7 @@ window.QUIZ_MAIN = function () {
   // mỗi lần mở trang tính một lượt xem
   counter("hit", "views", function (n) { setStat("views", n); });
   counter("get", "results", function (n) { setStat("results", n); });
+  balanceLoad();
 };
 </script>
 <script>
