@@ -30,17 +30,47 @@
       ],
       "say": [
         "Bạn tôi, đã lâu không gặp.",
-        "Ồ? Cũng thú vị đấy"
-      ]
+        "Ồ? Cũng thú vị đấy",
+        "Uh huh ♪ Ra là ảnh hồi đi học của Kevin là như vậy~"
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3,
+      "reply": {
+        "3": {
+          "who": "su",
+          "ava": 1,
+          "say": "Su!! Sao cậu cho cô ấy xem!"
+        }
+      }
     },
     "elysia": {
       "_ten": "Elysia",
       "color": "#ffd6f6",
-      "blurb": "Thiếu nữ hoàn hảo, xinh đẹp tuyệt vời, độc nhất vô nhị lại có người thứ hai sao?",
+      "blurb": "Thiếu nữ hoàn hảo, xinh đẹp tuyệt vời, độc nhất vô nhị lại có người thứ hai được sao?",
       "say": [
         "Được rồi, Elysia đã công nhận bạn xếp thứ hai sau cô ấy~",
-        "Thật khiến người ta lại nhớ về cô ấy nữa rồi."
-      ]
+        "Thật khiến người ta lại nhớ về cô ấy nữa rồi.",
+        "Có ai quản được cô ấy không?",
+        "Cảm ơn vì tất cả, Elysia. Thời đại... thật sự đã thay đổi rồi."
+      ],
+      "sayAva": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "avaMax": 4,
+      "reply": {
+        "3": {
+          "who": "su",
+          "ava": 1,
+          "say": "Không."
+        }
+      }
     },
     "aponia": {
       "_ten": "Aponia",
@@ -48,8 +78,22 @@
       "blurb": "Đằng sau sự nỗ lực và kỉ luật, đôi khi lại là trái tim mệt mỏi...",
       "say": [
         "Thật là một đứa bé ngoan, nào, đừng trở nên giống tôi quá nhé.",
-        "Chết đi! Aponia!"
-      ]
+        "Chết đi! Aponia!",
+        "... *ánh mắt cảnh giác*"
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3,
+      "reply": {
+        "3": {
+          "who": "kosma",
+          "ava": 2,
+          "say": "Không sao mà, Kosma... Đừng sợ."
+        }
+      }
     },
     "eden": {
       "_ten": "Eden",
@@ -60,8 +104,15 @@
       ],
       "say": [
         "Eden! Lại đây xem, có người giống chị chưa này~ Thật khiến người ta yêu thích~",
-        "Giọng ca của cô ấy, vẫn luôn hay như vậy."
-      ]
+        "Giọng ca của cô ấy, vẫn luôn hay như vậy.",
+        "ỒN ÀO CHẾT ĐI ĐƯỢC!"
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3
     },
     "villv": {
       "_ten": "Vill-V",
@@ -69,8 +120,22 @@
       "blurb": "Thiên tài của những thiên tài giáng lâm, biểu diễn... bắt đầu!",
       "say": [
         "Hừ, suốt ngày bày trò.",
-        "Cần tài trợ dự án? Được thôi."
-      ]
+        "Cần tài trợ dự án? Được thôi.",
+        "..."
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3,
+      "reply": {
+        "1": {
+          "who": "kalpas",
+          "ava": 2,
+          "say": "Cô thì không báo chắc?"
+        }
+      }
     },
     "kalpas": {
       "_ten": "Kalpas",
@@ -78,8 +143,15 @@
       "blurb": "Ngọn lửa huỷ diệt cái ác, mãi mãi rực cháy. Cùng với đó, là sự phẫn nộ vô biên.",
       "say": [
         "Á á! Lông đuôi bắt lửa rồi!!",
-        "Ta đã có Kevin Killer, không ngờ còn có cả God Key Killer!"
-      ]
+        "Ta đã có Kevin Killer, không ngờ còn có cả God Key Killer!",
+        "Nghe Aponia nói... Dạo này Kalpas \"ngoan\" rồi?"
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3
     },
     "su": {
       "_ten": "Su",
@@ -87,8 +159,15 @@
       "blurb": "Vị bác sĩ dịu dàng lịch thiệp, đã vậy còn vô cùng đẹp trai, chỉ là... sao không mở mắt nhỉ?",
       "say": [
         "Bạn tốt của tôi, thức đêm ít thôi!",
-        "Rốt cuộc phải làm sao mới khiến cậu ấy mở mắt nhỉ?"
-      ]
+        "Rốt cuộc phải làm sao mới khiến cậu ấy mở mắt nhỉ?",
+        "Hừ! Thằng mù nhu nhược!"
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3
     },
     "sakura": {
       "_ten": "SAKURA",
@@ -96,8 +175,15 @@
       "blurb": "Thiếu nữ bí ẩn lạnh lùng, nhát chém nhanh hơn cả cái chớp mắt.",
       "say": [
         "Chị SAKURA, thành lập Liên minh tai thú nào!",
-        "Lên nào, SAKURA!"
-      ]
+        "Lên nào, SAKURA!",
+        "*mỉm cười*"
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3
     },
     "kosma": {
       "_ten": "Kosma",
@@ -108,8 +194,22 @@
       ],
       "say": [
         "Giáo trình 100 cách để khiến Kosma nói chuyện, hiện đang đại hạ giá!",
-        "Kosma... Có rất nhiều đồ chơi... Muốn đi xem..."
-      ]
+        "Kosma... Có rất nhiều đồ chơi... Muốn đi xem...",
+        "Sự ăn ý của Hua, Kosma và Pardo thật sự đáng ngưỡng mộ."
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3,
+      "reply": {
+        "3": {
+          "who": "kalpas",
+          "ava": 1,
+          "say": "Hả? Em đã làm gì đâu?"
+        }
+      }
     },
     "mobius": {
       "_ten": "Mobius",
@@ -117,8 +217,22 @@
       "blurb": "Nhà khoa trụ cột của Bướm Trục Hoả, nghe đồn ai không khoẻ thì là do cô ấy...?",
       "say": [
         "Ồ, chuột bạch nhỏ, ngươi có suy nghĩ giống ta, vậy... có muốn cùng ta chơi một trò chơi nhỏ không? ",
-        "Hihi, đừng bắt nạt người khác thế chứ! Để ta chơi với cô, thế nào?"
-      ]
+        "Hihi, đừng bắt nạt người khác thế chứ! Để ta chơi với cô, thế nào?",
+        "Rất thích... đồ chơi... Bà nội Mobius tặng."
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3,
+      "reply": {
+        "3": {
+          "who": "mobius",
+          "ava": 1,
+          "say": "ELYSIA!!!"
+        }
+      }
     },
     "griseo": {
       "_ten": "Griseo",
@@ -129,8 +243,17 @@
       ],
       "say": [
         "Griseo cũng gần bằng tuổi Rin, hai đứa có khi sẽ là bạn tốt.",
-        "Con đường tương lai... em phải tự đi một mình rồi, nhưng anh sẽ luôn dõi theo."
-      ]
+        "Con đường tương lai... em phải tự đi một mình rồi, nhưng anh sẽ luôn dõi theo.",
+        "Chúng ta qua chỗ Kosma, \"tiện lượm một vòng\" nào!",
+        "Ta cũng khá tò mò... Thứ mà em nói là \"nơi ở của các vì sao\"."
+      ],
+      "sayAva": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "avaMax": 4
     },
     "hua": {
       "_ten": "Hua",
@@ -141,8 +264,15 @@
       ],
       "say": [
         "Giống ai không giống, lại giống lão cổ hủ! Cười chết mất!",
-        "Biết cười rồi, xem ra bên cạnh em đã có những người tuyệt vời."
-      ]
+        "Biết cười rồi, xem ra bên cạnh em đã có những người tuyệt vời.",
+        "Rất đáng tin cậy."
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3
     },
     "pardo": {
       "_ten": "Pardofelis",
@@ -153,8 +283,22 @@
       ],
       "say": [
         "Cứ trốn đi, đánh trận, đã có chị đây rồi.",
-        "CỬA PHÒNG CỦA TA SAO MẤT RỒI?!"
-      ]
+        "CỬA PHÒNG CỦA TA SAO MẤT RỒI?!",
+        "Pardo, mau trả cửa phòng lại cho Kalpas đi..."
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3,
+      "reply": {
+        "2": {
+          "who": "kalpas",
+          "ava": 1,
+          "say": "Em không biết gì hết! Á á, A Hua, A Ma, mau tới cứu tôi!!"
+        }
+      }
     },
     "none": {
       "_ten": "Không giống ai",
@@ -162,9 +306,21 @@
       "blurb": "Bạn thật bí ẩn! Không thể dự đoán nổi là giống ai trong 13 người.",
       "say": [
         "Dù bạn có giống hay không giống ai, Elysia vẫn luôn yêu bạn~",
-        "Chuột bạch nhỏ, thông số của ngươi đúng là chưa từng được ghi nhận đấy~"
+        "Chuột bạch nhỏ, thông số của ngươi đúng là chưa từng được ghi nhận đấy~",
+        "Làm người vốn dĩ cũng chẳng cần quá giống ai.",
+        "Giai điệu của bạn, thật sự khác biệt.",
+        "Sự đặc biệt của bạn vừa là món quà vừa là điểm yếu. Hãy biết phát huy và thông cảm cho chính mình nhé."
       ],
-      "num": "0"
+      "num": "0",
+      "sayAva": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "avaMax": 5,
+      "reply": {}
     }
   }
 }
