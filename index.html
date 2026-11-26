@@ -401,9 +401,9 @@ window.QUIZ_MAIN = function () {
   function intro() {
     var saved = loadSave();
     var img = INTRO_IMG ? '<img src="' + esc(INTRO_IMG) + '" alt="" onerror="this.parentNode.textContent=\'Hình ảnh\'">' : 'Hình ảnh';
-    app.innerHTML = '<h1>13 con người, 13 ngã rẽ khác biệt.</h1>' +
-      '<p class="quote">Khi đứng trước khả năng lựa chọn, nhất định đừng để bản thân hối hận</p>' +
-      '<p>Cùng tìm hiểu xem bạn sẽ giống ai nhất trong 13 Anh Kiệt nhé! Câu hỏi sẽ được xáo trộn ngẫu nhiên, hãy xem kĩ câu hỏi và tất cả các đáp án~</p>' +
+    app.innerHTML = '<h1>13 con người, 13 ngã rẽ khác biệt</h1>' +
+      '<p class="quote">Khi đứng trước khả năng lựa chọn, nhất định đừng để bản thân hối hận!</p>' +
+      '<p>Cùng tìm hiểu xem bạn sẽ giống ai nhất trong 13 Anh Kiệt nhé! Câu hỏi sẽ được xáo trộn ngẫu nhiên, hãy xem kĩ câu hỏi và tất cả các đáp án~<br>Quiz chỉ mang tính cho vui, mong mọi người hoan hỉ.</p>' +
       '<div class="introimg">' + img + '</div>' +
       (saved ? '<p class="hint" style="margin:0 0 10px">' + (saved.done ? 'Bạn đã làm quiz này rồi.' : 'Bạn đang làm dở: đã trả lời ' + saved.answers.filter(function (a) { return a.length; }).length + ' trên ' + D.questions.length + ' câu.') + '</p>' : '') +
       '<button class="primary" id="go">' + (saved ? (saved.done ? 'Xem lại kết quả' : 'Làm tiếp') : 'Bắt đầu') + '</button>' +
