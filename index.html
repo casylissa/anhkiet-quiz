@@ -83,6 +83,8 @@ button.ghost{text-align:center;color:var(--sub)}
 .stk img{width:100%;height:100%;object-fit:cover}
 .bub{position:relative;flex:1;background:#fff;color:#2b2848;border-radius:16px;padding:10px 14px;font-size:14.5px;line-height:1.55;box-shadow:0 4px 12px rgba(20,16,50,.2)}
 .bub:before{content:"";position:absolute;left:-7px;top:20px;border:7px solid transparent;border-left:0;border-right-color:#fff}
+.say.back{flex-direction:row-reverse;margin-top:10px}
+.say.back .bub:before{left:auto;right:-7px;border:7px solid transparent;border-right:0;border-left-color:#fff}
 .pop .primary{margin-top:16px}
 .pop .alt{background:#fff;color:#2b2848;border-color:#fff;text-align:center;font-weight:600;margin:10px 0 0}
 .pop .alt:hover{background:#f1effd;border-color:#f1effd}
@@ -284,7 +286,7 @@ window.QUIZ_MAIN = function () {
     if (d) { if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4; h *= 60; if (h < 0) h += 360; }
     return Math.round(h);
   }
-  // Chọn ngẫu nhiên một câu nhận xét. Câu thứ 1 đi cùng ava 1, câu thứ 2 đi cùng ava 2, câu thứ 3 quay lại ava 1...
+  // Chọn ngẫu nhiên một câu nhận xét (các câu có tỉ lệ bằng nhau). Mỗi câu có ava riêng, số ava ghi trong "sayAva" của content.json
   function pickSay(id) {
     var a = (CC[id] || {}).say; a = Array.isArray(a) ? a : (a ? [a] : []);
     var ok = [];
@@ -506,7 +508,15 @@ window.QUIZ_MAIN = function () {
   function openCard(id, phaseIdx) {
     closeCard(true);
     var c = id === "none" ? null : ch(id), ph = c ? c.phases[phaseIdx || 0] : null;
-    var img = CHAR_IMG[id], pk = pickSay(id), avaIdx = pk ? pk.i % 2 : 0, stk = CHAR_STICKER[id] || avaOf(id, avaIdx);
+    var img = CHAR_IMG[id], pk = pickSay(id);
+    var avaIdx = pk ? (Number(((CC[id] || {}).sayAva || [])[pk.i]) || pk.i + 1) - 1 : 0;
+    // thiếu ảnh ava riêng thì lần lượt thử ava 1 / ava 2 xen kẽ, rồi ava 1
+    var avaBackup = [pk ? pk.i % 2 : 0, 0].filter(function (k, i, a) { return k !== avaIdx && a.indexOf(k) === i; });
+    var stk = CHAR_STICKER[id] || avaOf(id, avaIdx);
+    // Lời đáp gắn với đúng một câu: content.json ghi "reply": { "<số ava của câu>": { who, ava, say } }
+    var rp = pk ? ((CC[id] || {}).reply || {})[avaIdx + 1] : null;
+    if (!(rp && rp.say && String(rp.say).trim() && (rp.who === "none" || ch(rp.who)))) rp = null;
+    var rpAva = rp ? (Number(rp.ava) || 1) - 1 : 0;
     if (Array.isArray(img)) img = img[phaseIdx || 0] || img[0] || "";
     var cand = img ? [] : cardImgs(id, phaseIdx); img = img || cand.shift() || "";
     var say = (pk && pk.t) || CHAR_SAY[id] || ("Lời nhận xét của " + (c ? c.name : "thẻ này") + " sẽ hiện ở đây."), bl = blurbOf(id, phaseIdx), cc = colorOf(id);
@@ -516,11 +526,17 @@ window.QUIZ_MAIN = function () {
       '<div class="tcard" style="' + cardTheme(cc, hue(id)) + '">' + FRAME + '<div class="num' + (numOf(id) === "0" ? " zero" : "") + '">' + esc(numOf(id)) + '</div><div class="art">' + (img ? '<img src="' + esc(img) + '" alt="' + esc(nameOf(id)) + '">' : '<span class="init">' + ini(id) + '</span>') + '</div>' +
       '<div class="plate"><div class="orn"><i></i></div><div class="nm" style="' + nmStyle(nameOf(id)) + '">' + esc(nameOf(id)) + '</div>' +  (bl ? '<div class="lb">' + esc(bl) + '</div>' : '') + '</div></div>' +
       '<div class="say"><div class="stk">' + (stk ? '<img src="' + esc(stk) + '" alt="">' : ini(id)) + '</div><div class="bub">' + esc(say) + '</div></div>' +
+      (rp ? '<div class="say back" style="--h:' + hue(rp.who) + '"><div class="stk"><img src="' + esc(avaOf(rp.who, rpAva)) + '" alt="' + esc(nameOf(rp.who)) + '"></div><div class="bub">' + esc(rp.say) + '</div></div>' : '') +
       '<button class="primary" id="cl">Đóng</button><button class="alt" id="rs">Không giống! Lại đi</button></div>';
-    var sImg = ov.querySelector(".stk img"), triedBase = false;
+    var sImg = ov.querySelector(".stk img");
     if (sImg) sImg.onerror = function () {
-      if (!CHAR_STICKER[id] && avaIdx > 0 && !triedBase) { triedBase = true; sImg.src = avaOf(id, 0); return; }
+      if (!CHAR_STICKER[id] && avaBackup.length) { sImg.src = avaOf(id, avaBackup.shift()); return; }
       sImg.onerror = null; sImg.parentNode.textContent = ini(id);
+    };
+    var rImg = ov.querySelector(".say.back img");
+    if (rImg) rImg.onerror = function () {
+      if (rpAva > 0) { rpAva = 0; rImg.src = avaOf(rp.who, 0); return; }
+      rImg.onerror = null; rImg.parentNode.textContent = ini(rp.who);
     };
     var artImg = ov.querySelector(".art img");
     if (artImg && cand.length) artImg.onerror = function () {
