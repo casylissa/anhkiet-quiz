@@ -29,7 +29,7 @@
         "Thật đáng tin cậy! Nhưng sao không còn cười nữa..."
       ],
       "say": [
-        "Hoá ra chúng ra rất giống nhau!",
+        "Bạn tôi, đã lâu không gặp.",
         "Ồ? Cũng thú vị đấy"
       ]
     },
@@ -78,7 +78,7 @@
       "blurb": "Ngọn lửa huỷ diệt cái ác, mãi mãi rực cháy. Cùng với đó, là sự phẫn nộ vô biên.",
       "say": [
         "Á á! Lông đuôi bắt lửa rồi!!",
-        "Giống ta? Ngươi mà cũng đòi giống ta?"
+        "Ta đã có Kevin Killer, không ngờ còn có cả God Key Killer!"
       ]
     },
     "su": {
@@ -128,7 +128,7 @@
         "Sau giấc ngủ thật dài, sâu nhỏ phá kén thành bướm, đã biết bảo vệ người khác rồi!"
       ],
       "say": [
-        "Griseo~ Thế nào rồi, nhớ vẽ ta thanh mảnh một chút đấy~",
+        "Griseo cũng gần bằng tuổi Rin, hai đứa có khi sẽ là bạn tốt.",
         "Con đường tương lai... em phải tự đi một mình rồi, nhưng anh sẽ luôn dõi theo."
       ]
     },
@@ -141,7 +141,7 @@
       ],
       "say": [
         "Giống ai không giống, lại giống lão cổ hủ! Cười chết mất!",
-        "Biết cười rồi, xem ra bên cạnh em đã có những người tuyệt vời rồi."
+        "Biết cười rồi, xem ra bên cạnh em đã có những người tuyệt vời."
       ]
     },
     "pardo": {
@@ -163,7 +163,8 @@
       "say": [
         "Dù bạn có giống hay không giống ai, Elysia vẫn luôn yêu bạn~",
         "Chuột bạch nhỏ, thông số của ngươi đúng là chưa từng được ghi nhận đấy~"
-      ]
+      ],
+      "num": "0"
     }
   }
 }
