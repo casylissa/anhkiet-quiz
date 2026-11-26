@@ -1,0 +1,326 @@
+{
+  "_huong_dan": [
+    "File này chứa nội dung phần kết quả. Sửa bằng tay, nhớ giữ dấu ngoặc kép và dấu phẩy.",
+    "images: ảnh nằm trong thư mục asset/. preview là ảnh màn hình đầu (asset/preview.png). card là hình trên thẻ (asset/kevin.png), ava là ảnh đại diện cạnh lời nhận xét (asset/kevin_ava.png), {id} được thay bằng id nhân vật. Nhân vật nhiều giai đoạn có thể thêm ảnh riêng từng giai đoạn là asset/kevin_1.png, asset/kevin_2.png (không có thì dùng asset/kevin.png). ext là đuôi ảnh, đổi thành jpg hoặc webp nếu cần.",
+    "counter: đếm số người ra cùng kết quả. Đặt enabled thành false để tắt. namespace đặt tên riêng cho quiz của bạn để không trùng người khác.",
+    "characters: mỗi nhân vật có color (mã màu #rrggbb, đổi theme thẻ và trang kết quả theo màu này), blurb (đoạn nhỏ dưới tên trên thẻ, để trống thì ẩn) và say (danh sách lời nhận xét, mỗi lần ra thẻ hiện ngẫu nhiên một câu).",
+    "blurb có thể là một chuỗi, hoặc danh sách theo giai đoạn nếu nhân vật có nhiều giai đoạn (ví dụ Kevin: [“lúc ban đầu”, “sau biến cố”]).",
+    "say có thể có hai câu hoặc nhiều hơn. Câu để trống sẽ bị bỏ qua. Nếu cả hai đều trống, thẻ hiện dòng chữ giữ chỗ.",
+    "Dòng _ten chỉ để bạn dễ nhìn, quiz không đọc."
+  ],
+  "images": {
+    "dir": "asset/",
+    "ext": "png",
+    "preview": "preview",
+    "card": "{id}",
+    "ava": "{id}_ava"
+  },
+  "counter": {
+    "enabled": true,
+    "url": "https://abacus.jasoncameron.dev",
+    "namespace": "quiz-13-anh-kiet"
+  },
+  "characters": {
+    "kevin": {
+      "_ten": "Kevin",
+      "color": "#4382b1",
+      "blurb": [
+        "Hoàng tử học đường, là bạn đấy sao?",
+        "Thật đáng tin cậy! Nhưng sao không còn cười nữa..."
+      ],
+      "say": [
+        "Bạn tôi, đã lâu không gặp.",
+        "Ồ? Cũng thú vị đấy",
+        "Uh huh ♪ Ra là ảnh hồi đi học của Kevin là như vậy~"
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3,
+      "reply": {
+        "3": {
+          "who": "su",
+          "ava": 1,
+          "say": "Su!! Sao cậu cho cô ấy xem!"
+        }
+      }
+    },
+    "elysia": {
+      "_ten": "Elysia",
+      "color": "#ffd6f6",
+      "blurb": "Thiếu nữ hoàn hảo, xinh đẹp tuyệt vời, độc nhất vô nhị lại có người thứ hai được sao?",
+      "say": [
+        "Được rồi, Elysia đã công nhận bạn xếp thứ hai sau cô ấy~",
+        "Thật khiến người ta lại nhớ về cô ấy nữa rồi.",
+        "Có ai quản được cô ấy không?",
+        "Cảm ơn vì tất cả, Elysia. Thời đại... thật sự đã thay đổi rồi."
+      ],
+      "sayAva": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "avaMax": 4,
+      "reply": {
+        "3": {
+          "who": "su",
+          "ava": 1,
+          "say": "Không."
+        }
+      }
+    },
+    "aponia": {
+      "_ten": "Aponia",
+      "color": "#5fa9dd",
+      "blurb": "Đằng sau sự nỗ lực và kỉ luật, đôi khi lại là trái tim mệt mỏi...",
+      "say": [
+        "Thật là một đứa bé ngoan, nào, đừng trở nên giống tôi quá nhé.",
+        "Chết đi! Aponia!",
+        "... *ánh mắt cảnh giác*"
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3,
+      "reply": {
+        "3": {
+          "who": "kosma",
+          "ava": 2,
+          "say": "Không sao mà, Kosma... Đừng sợ."
+        }
+      }
+    },
+    "eden": {
+      "_ten": "Eden",
+      "color": "#974e59",
+      "blurb": [
+        "Danh ca Eden, ngôi sao sáng ngời",
+        "Trầm kim như mộng, ngày tháng đẹp đẽ năm xưa bị cát bụi thời đại chôn vùi"
+      ],
+      "say": [
+        "Eden! Lại đây xem, có người giống chị chưa này~ Thật khiến người ta yêu thích~",
+        "Giọng ca của cô ấy, vẫn luôn hay như vậy.",
+        "ỒN ÀO CHẾT ĐI ĐƯỢC!"
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3
+    },
+    "villv": {
+      "_ten": "Vill-V",
+      "color": "#6b473c",
+      "blurb": "Thiên tài của những thiên tài giáng lâm, biểu diễn... bắt đầu!",
+      "say": [
+        "Hừ, suốt ngày bày trò.",
+        "Cần tài trợ dự án? Được thôi.",
+        "..."
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3,
+      "reply": {
+        "1": {
+          "who": "kalpas",
+          "ava": 2,
+          "say": "Cô thì không báo chắc?"
+        }
+      }
+    },
+    "kalpas": {
+      "_ten": "Kalpas",
+      "color": "#dd9e5f",
+      "blurb": "Ngọn lửa huỷ diệt cái ác, mãi mãi rực cháy. Cùng với đó, là sự phẫn nộ vô biên.",
+      "say": [
+        "Á á! Lông đuôi bắt lửa rồi!!",
+        "Ta đã có Kevin Killer, không ngờ còn có cả God Key Killer!",
+        "Nghe Aponia nói... Dạo này Kalpas \"ngoan\" rồi?"
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3
+    },
+    "su": {
+      "_ten": "Su",
+      "color": "#5fddb3",
+      "blurb": "Vị bác sĩ dịu dàng lịch thiệp, đã vậy còn vô cùng đẹp trai, chỉ là... sao không mở mắt nhỉ?",
+      "say": [
+        "Bạn tốt của tôi, thức đêm ít thôi!",
+        "Rốt cuộc phải làm sao mới khiến cậu ấy mở mắt nhỉ?",
+        "Hừ! Thằng mù nhu nhược!"
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3
+    },
+    "sakura": {
+      "_ten": "SAKURA",
+      "color": "#dd5fa2",
+      "blurb": "Thiếu nữ bí ẩn lạnh lùng, nhát chém nhanh hơn cả cái chớp mắt.",
+      "say": [
+        "Chị SAKURA, thành lập Liên minh tai thú nào!",
+        "Lên nào, SAKURA!",
+        "*mỉm cười*"
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3
+    },
+    "kosma": {
+      "_ten": "Kosma",
+      "color": "#1f6142",
+      "blurb": [
+        "Thiếu niên trầm tính hướng nội, thần tượng Kevin.",
+        "Dường như chỉ có tiếng kèn, mới có thể thay những lời cậu ấy không thể nói."
+      ],
+      "say": [
+        "Giáo trình 100 cách để khiến Kosma nói chuyện, hiện đang đại hạ giá!",
+        "Kosma... Có rất nhiều đồ chơi... Muốn đi xem...",
+        "Sự ăn ý của Hua, Kosma và Pardo thật sự đáng ngưỡng mộ."
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3,
+      "reply": {
+        "3": {
+          "who": "kalpas",
+          "ava": 1,
+          "say": "Hả? Em đã làm gì đâu?"
+        }
+      }
+    },
+    "mobius": {
+      "_ten": "Mobius",
+      "color": "#acff80",
+      "blurb": "Nhà khoa trụ cột của Bướm Trục Hoả, nghe đồn ai không khoẻ thì là do cô ấy...?",
+      "say": [
+        "Ồ, chuột bạch nhỏ, ngươi có suy nghĩ giống ta, vậy... có muốn cùng ta chơi một trò chơi nhỏ không? ",
+        "Hihi, đừng bắt nạt người khác thế chứ! Để ta chơi với cô, thế nào?",
+        "Rất thích... đồ chơi... Bà nội Mobius tặng."
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3,
+      "reply": {
+        "3": {
+          "who": "mobius",
+          "ava": 1,
+          "say": "ELYSIA!!!"
+        }
+      }
+    },
+    "griseo": {
+      "_ten": "Griseo",
+      "color": "#5fb3dd",
+      "blurb": [
+        "Nhìn vào cô ấy làm người ta run sợ, cái giá phải trả cho tài năng này... rốt cuộc lớn đến mức nào?",
+        "Sau giấc ngủ thật dài, sâu nhỏ phá kén thành bướm, đã biết bảo vệ người khác rồi!"
+      ],
+      "say": [
+        "Griseo cũng gần bằng tuổi Rin, hai đứa có khi sẽ là bạn tốt.",
+        "Con đường tương lai... em phải tự đi một mình rồi, nhưng anh sẽ luôn dõi theo.",
+        "Chúng ta qua chỗ Kosma, \"tiện lượm một vòng\" nào!",
+        "Ta cũng khá tò mò... Thứ mà em nói là \"nơi ở của các vì sao\"."
+      ],
+      "sayAva": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "avaMax": 4
+    },
+    "hua": {
+      "_ten": "Hua",
+      "color": "#747ce7",
+      "blurb": [
+        "Cứng nhắc, trách nhiệm... Dường như mọi người luôn nói về cô ấy như vậy.",
+        "Lớp trưởng Fu Hua vừa nghiêm khắc vừa dịu dàng lại kiên nhẫn!"
+      ],
+      "say": [
+        "Giống ai không giống, lại giống lão cổ hủ! Cười chết mất!",
+        "Biết cười rồi, xem ra bên cạnh em đã có những người tuyệt vời.",
+        "Rất đáng tin cậy."
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3
+    },
+    "pardo": {
+      "_ten": "Pardofelis",
+      "color": "#d1b194",
+      "blurb": [
+        "Bé mèo tinh nghịch, chỉ thích nằm lười sưởi nắng.",
+        "Dũng cảm... đâu phải thứ có thể thực hiện bằng lời nói suông."
+      ],
+      "say": [
+        "Cứ trốn đi, đánh trận, đã có chị đây rồi.",
+        "CỬA PHÒNG CỦA TA SAO MẤT RỒI?!",
+        "Pardo, mau trả cửa phòng lại cho Kalpas đi..."
+      ],
+      "sayAva": [
+        1,
+        2,
+        3
+      ],
+      "avaMax": 3,
+      "reply": {
+        "2": {
+          "who": "kalpas",
+          "ava": 1,
+          "say": "Em không biết gì hết! Á á, A Hua, A Ma, mau tới cứu tôi!!"
+        }
+      }
+    },
+    "none": {
+      "_ten": "Không giống ai",
+      "color": "#a6a6a6",
+      "blurb": "Bạn thật bí ẩn! Không thể dự đoán nổi là giống ai trong 13 người.",
+      "say": [
+        "Dù bạn có giống hay không giống ai, Elysia vẫn luôn yêu bạn~",
+        "Chuột bạch nhỏ, thông số của ngươi đúng là chưa từng được ghi nhận đấy~",
+        "Làm người vốn dĩ cũng chẳng cần quá giống ai.",
+        "Giai điệu của bạn, thật sự khác biệt.",
+        "Sự đặc biệt của bạn vừa là món quà vừa là điểm yếu. Hãy biết phát huy và thông cảm cho chính mình nhé."
+      ],
+      "num": "0",
+      "sayAva": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "avaMax": 5,
+      "reply": {}
+    }
+  }
+}
