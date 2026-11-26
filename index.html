@@ -84,9 +84,10 @@ button.ghost{text-align:center;color:var(--sub)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 button.primary{color:#fff}
 .quote{font-size:17px;font-weight:500;color:var(--ink);margin:0 0 14px}
-.introimg{width:100%;aspect-ratio:16/10;border-radius:18px;margin:6px 0 18px;overflow:hidden;background:var(--acc-soft);border:1.5px dashed var(--line);display:grid;place-items:center;color:var(--sub);font-size:15px}
+.introimg{width:100%;aspect-ratio:16/9;border-radius:18px;margin:6px 0 18px;overflow:hidden;background:var(--acc-soft);border:1.5px dashed var(--line);display:grid;place-items:center;color:var(--sub);font-size:15px}
 .introimg img{width:100%;height:auto;display:block}
 .introimg.loaded{aspect-ratio:auto;border:0;background:none;display:block}
+.introimg.loaded img{display:block}
 .qn{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 20px}
 .qn button{width:26px;height:26px;padding:0;margin:0;border:0;border-radius:6px;background:transparent;display:grid;place-items:center}
 .qn button:hover{background:transparent}
@@ -374,9 +375,32 @@ window.QUIZ_MAIN = function () {
   function start() { reset(); intro(); }
   function restart() { clearSave(); start(); }
 
+  // Ảnh mở đầu có viền trong suốt thì cắt phần viền khi hiển thị, để góc bo ôm khít ảnh (không sửa file)
+  function fitIntro(img) {
+    var box = img.parentNode; box.classList.add("loaded");
+    try {
+      var W = img.naturalWidth, H = img.naturalHeight, k = Math.min(1, 1600 / W), w = Math.round(W * k), h = Math.round(H * k);
+      var cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+      var g = cv.getContext("2d"); g.drawImage(img, 0, 0, w, h);
+      var a = g.getImageData(0, 0, w, h).data;
+      // một hàng/cột được giữ lại khi quá nửa số điểm ảnh không trong suốt
+      var solid = function (start, step, n) { var c = 0; for (var i = 0; i < n; i++) if (a[(start + i * step) * 4 + 3] > 250) c++; return c > n / 2; };
+      var t = 0, b = h - 1, l = 0, r = w - 1;
+      while (t < b && !solid(t * w, 1, w)) t++;
+      while (b > t && !solid(b * w, 1, w)) b--;
+      while (l < r && !solid(l, w, h)) l++;
+      while (r > l && !solid(r, w, h)) r--;
+      var bw = r - l + 1, bh = b - t + 1;
+      // ảnh không có viền, hoặc phần đặc quá nhỏ (ảnh dạng logo nền trong suốt) thì để nguyên
+      if ((bw === w && bh === h) || bw < w * .5 || bh < h * .5) return;
+      box.style.aspectRatio = bw + " / " + bh;
+      img.style.cssText = "width:" + (w / bw * 100) + "%;max-width:none;margin:" + (-t / bw * 100) + "% 0 0 " + (-l / bw * 100) + "%";
+    } catch (e) {} // mở bằng file:// thì trình duyệt không cho đọc điểm ảnh
+  }
+
   function intro() {
     var saved = loadSave();
-    var img = INTRO_IMG ? '<img src="' + esc(INTRO_IMG) + '" alt="" onload="this.parentNode.classList.add(\'loaded\')" onerror="this.parentNode.textContent=\'Hình ảnh\'">' : 'Hình ảnh';
+    var img = INTRO_IMG ? '<img src="' + esc(INTRO_IMG) + '" alt="" onerror="this.parentNode.textContent=\'Hình ảnh\'">' : 'Hình ảnh';
     app.innerHTML = '<h1>13 con người, 13 ngã rẽ khác biệt.</h1>' +
       '<p class="quote">Khi đứng trước khả năng lựa chọn, nhất định đừng để bản thân hối hận</p>' +
       '<p>Cùng tìm hiểu xem bạn sẽ giống ai nhất trong 13 Anh Kiệt nhé! Câu hỏi sẽ được xáo trộn ngẫu nhiên, hãy xem kĩ câu hỏi và tất cả các đáp án~</p>' +
@@ -384,6 +408,8 @@ window.QUIZ_MAIN = function () {
       (saved ? '<p class="hint" style="margin:0 0 10px">' + (saved.done ? 'Bạn đã làm quiz này rồi.' : 'Bạn đang làm dở: đã trả lời ' + saved.answers.filter(function (a) { return a.length; }).length + ' trên ' + D.questions.length + ' câu.') + '</p>' : '') +
       '<button class="primary" id="go">' + (saved ? (saved.done ? 'Xem lại kết quả' : 'Làm tiếp') : 'Bắt đầu') + '</button>' +
       (saved ? '<button class="ghost" id="fresh" style="margin-top:10px">Làm lại từ đầu</button>' : '');
+    var pic = app.querySelector(".introimg img");
+    if (pic) { pic.onload = function () { fitIntro(pic); }; if (pic.complete && pic.naturalWidth) fitIntro(pic); }
     document.getElementById("go").onclick = function () {
       if (saved) { order = saved.order; answers = saved.answers; cur = saved.cur; done = saved.done || null; }
       if (done) showSaved(); else question();
