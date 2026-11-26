@@ -72,8 +72,12 @@ button.ghost{text-align:center;color:var(--sub)}
 .tcard .lb{font-size:12.5px;line-height:1.45;color:var(--fg2);margin-top:5px}
 .cnt{margin:14px 0 0;font-size:15px}
 .cnt b{color:var(--acc)}
-.stats{margin:14px 0 0;font-size:13.5px;text-align:center}
-.stats b{color:var(--acc)}
+/* đáy khung chừa đúng bằng hai bên */
+#app{padding-bottom:24px}
+#app>button,#app>div:last-child>button{display:block}
+#app>:last-child,#app>div:last-child>:last-child{margin-bottom:0}
+.stats{margin:10px 0 0;font-size:11.5px;text-align:center;opacity:.8}
+.stats b{font-weight:600}
 .say{display:flex;align-items:flex-start;gap:10px;margin:14px 2px 0}
 .stk{width:60px;height:60px;border-radius:50%;flex-shrink:0;background:hsl(var(--h) 70% 86%);border:3px solid #fff;display:grid;place-items:center;font-weight:700;font-size:24px;color:hsl(var(--h) 45% 35%);overflow:hidden;box-shadow:0 4px 12px rgba(20,16,50,.25)}
 .stk img{width:100%;height:100%;object-fit:cover}
@@ -102,7 +106,7 @@ button.back{margin-top:2px}
 </style>
 </head>
 <body>
-<div class="wrap"><div class="card" id="app"></div></div>
+<div class="wrap"><div class="card" id="app"></div><p class="stats" id="stats" hidden></p></div>
 
 <script>(function (root) {
 var AX = ["A", "B", "C", "D", "E", "F", "G", "H"];
@@ -312,7 +316,7 @@ window.QUIZ_MAIN = function () {
     var parts = [], f = function (n) { return "<b>" + n.toLocaleString("vi-VN") + "</b>"; };
     if (stats.views != null) parts.push(f(stats.views) + " lượt xem");
     if (stats.results != null) parts.push(f(stats.results) + " lượt ra kết quả");
-    box.innerHTML = parts.join(" · "); box.hidden = !parts.length;
+    box.innerHTML = parts.join(" · "); box.hidden = !parts.length || !document.getElementById("go"); // chỉ hiện ở trang đầu
   }
   function setStat(name, n) { stats[name] = Math.max(stats[name] || 0, n); drawStats(); }
   // Ảnh thẻ: chuỗi (data URI hoặc URL). Riêng kevin và kosma có 2 ảnh theo thứ tự [lúc ban đầu, sau biến cố].
@@ -427,7 +431,6 @@ window.QUIZ_MAIN = function () {
       (saved ? '<p class="hint" style="margin:0 0 10px">' + (saved.done ? 'Bạn đã làm quiz này rồi.' : 'Bạn đang làm dở: đã trả lời ' + saved.answers.filter(function (a) { return a.length; }).length + ' trên ' + D.questions.length + ' câu.') + '</p>' : '') +
       '<button class="primary" id="go">' + (saved ? (saved.done ? 'Xem lại kết quả' : 'Làm tiếp') : 'Bắt đầu') + '</button>' +
       (saved ? '<button class="ghost" id="fresh" style="margin-top:10px">Làm lại từ đầu</button>' : '');
-    app.insertAdjacentHTML("beforeend", '<p class="stats" id="stats" hidden></p>');
     drawStats();
     var pic = app.querySelector(".introimg img");
     if (pic) { pic.onload = function () { fitIntro(pic); }; if (pic.complete && pic.naturalWidth) fitIntro(pic); }
@@ -467,7 +470,7 @@ window.QUIZ_MAIN = function () {
       '<h2>' + esc(q.text) + '</h2>' + (q.multi ? '<p class="hint">Chọn tối đa ' + q.multi + ' đáp án.</p>' : '') + '<div id="opts"></div>' +
       '<button class="primary" id="next"' + (multiSel.length ? '' : ' disabled') + '>' + (last ? 'Xem kết quả' : 'Tiếp tục') + '</button>' +
       (cur > 0 ? '<button class="ghost back" id="back">Quay lại</button>' : '');
-    top();
+    drawStats(); top();
     var opts = document.getElementById("opts"), nx = document.getElementById("next"), btns = [];
     shuffle(q.ans.map(function (_, i) { return i; })).forEach(function (ai) {
       var b = document.createElement("button"), on = multiSel.indexOf(ai) > -1;
@@ -562,7 +565,7 @@ window.QUIZ_MAIN = function () {
       '<h2>' + esc(q.text) + '</h2><div id="opts"></div>' +
       '<button class="primary" id="tbnext" disabled>' + (i === qs.length - 1 ? 'Xem kết quả' : 'Tiếp tục') + '</button>' +
       '<button class="ghost back" id="tbback">Quay lại</button>';
-    top();
+    drawStats(); top();
     var opts = document.getElementById("opts"), nx = document.getElementById("tbnext"), btns = [];
     shuffle(q.ans.map(function (_, k) { return k; })).forEach(function (ai) {
       var b = document.createElement("button");
@@ -603,7 +606,7 @@ window.QUIZ_MAIN = function () {
     if (R.daily.id !== R.pressure.id) html += '<p class="note">Ngày thường bạn giống <b>' + esc(R.daily.name) + '</b>, nhưng khi bị dồn vào chân tường lại giống <b>' + esc(R.pressure.name) + '</b>.</p>';
     html += '<p class="cnt" id="cnt" hidden></p><button class="primary" id="again2" style="margin-top:18px">Xem lại thẻ của bạn</button>' +
       '<div style="margin-top:22px"><button class="ghost" id="again">Làm lại</button></div>';
-    app.innerHTML = html; top();
+    app.innerHTML = html; drawStats(); top();
     document.getElementById("again2").onclick = function () { openCard(id, pi); };
     document.getElementById("again").onclick = restart;
     var cntEl = document.getElementById("cnt");
