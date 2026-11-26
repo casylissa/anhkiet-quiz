@@ -1,15 +1,13 @@
 <!doctype html>
-<html lang="vi" data-tone="pinkpurple">
+<html lang="vi">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Bạn giống ai nhất trong 13 Anh Kiệt?</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Cormorant+Garamond:wght@600;700&display=swap">
 <style>
-:root{--bg:#f6f5fb;--card:#fff;--ink:#2b2848;--sub:#6f6c8d;--line:#e6e4f2;--acc:#7c6cf0;--acc-soft:#ece9fd;
+:root{color-scheme:light;--bg:#FFEEFD;--card:#fff;--ink:hsl(300 30% 20%);--sub:hsl(300 12% 45%);--line:hsl(300 35% 90%);--acc:#7C6CF0;--acc-soft:#ECE9FD;
 box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15142a;--card:#1e1d3a;--ink:#efeefc;--sub:#a8a6cb;--line:#33315a;--acc:#9a8cff;--acc-soft:#2a2850}}
-:root[data-theme="dark"]{--bg:#15142a;--card:#1e1d3a;--ink:#efeefc;--sub:#a8a6cb;--line:#33315a;--acc:#9a8cff;--acc-soft:#2a2850}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.65;display:flex;justify-content:center;padding:28px 16px 48px}
@@ -32,15 +30,11 @@ button.ghost{text-align:center;color:var(--sub)}
 .hint{font-size:14px;color:var(--sub);margin:-8px 0 16px}
 .faces{display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 22px}
 .dot{width:34px;height:34px;border-radius:50%;background:hsl(var(--h) 70% 86%);color:hsl(var(--h) 45% 30%);display:grid;place-items:center;font-weight:700;font-size:14px}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .dot{background:hsl(var(--h) 35% 28%);color:hsl(var(--h) 80% 88%)}}
 .res{background:hsl(var(--h) 80% 94%);border:1px solid hsl(var(--h) 60% 86%);border-radius:24px;padding:28px 24px;margin:0 0 16px}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .res{background:hsl(var(--h) 30% 20%);border-color:hsl(var(--h) 30% 30%)}}
 .mono{width:72px;height:72px;border-radius:24px;background:hsl(var(--h) 70% 82%);color:hsl(var(--h) 50% 28%);display:grid;place-items:center;font-size:32px;font-weight:700;margin:0 0 16px}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .mono{background:hsl(var(--h) 35% 32%);color:hsl(var(--h) 80% 90%)}}
 .big{font-size:32px;font-weight:700;line-height:1.2;margin:0 0 2px}
 .ph{font-size:15px;color:var(--sub);margin:0 0 10px}
-.pct{font-size:17px;margin:0 0 8px;font-weight:600;color:hsl(var(--h) 50% 36%);margin:0 0 12px}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .pct{color:hsl(var(--h) 80% 80%)}}
+.pct{font-size:17px;margin:0 0 8px;font-weight:600;color:var(--acc);margin:0 0 12px}
 .res p{color:var(--ink);opacity:.85}
 .row{display:flex;align-items:center;gap:10px;margin:0 0 8px;font-size:15px}
 .row .n{width:92px;flex-shrink:0}
@@ -53,7 +47,6 @@ button.ghost{text-align:center;color:var(--sub)}
 .tile .dot{width:44px;height:44px;font-size:18px}
 .sec{font-size:17px;font-weight:600;margin:26px 0 0}
 .phs{border-top:1px solid hsl(var(--h) 50% 84%);margin-top:14px;padding-top:12px}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .phs{border-color:hsl(var(--h) 30% 30%)}}
 .phs b{font-weight:600}
 
 .ov{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));background:rgba(30,26,60,.55);backdrop-filter:blur(6px);overflow:auto;animation:fade .2s}
@@ -61,8 +54,7 @@ button.ghost{text-align:center;color:var(--sub)}
 @keyframes fade{from{opacity:0}}
 @keyframes rise{from{opacity:0;transform:translateY(24px) scale(.92) rotate(-2deg)}}
 .tcard{--h:250;--bg1:#3b3560;--bg2:#2a2547;--fg:#f4f1ff;--fg2:#d9d4f0;--art:#f7f5fb;position:relative;aspect-ratio:2/3;border-radius:18px;padding:24px 22px 18px;display:flex;flex-direction:column;gap:8px;color:var(--fg);background:linear-gradient(170deg,var(--bg1),var(--bg2));box-shadow:0 14px 32px rgba(20,16,50,.35)}
-.tcard:before{content:"";position:absolute;inset:6px;border:1.5px solid var(--fg);border-radius:12px;pointer-events:none}
-.tcard:after{content:"";position:absolute;inset:11px;--r:18px;pointer-events:none;border:1px solid var(--fg);background:radial-gradient(circle at 0 0,transparent calc(var(--r) - .5px),var(--fg) calc(var(--r) - .5px),var(--fg) calc(var(--r) + .5px),transparent calc(var(--r) + .5px)) 0 0/calc(var(--r) + 3px) calc(var(--r) + 3px) no-repeat,radial-gradient(circle at 100% 0,transparent calc(var(--r) - .5px),var(--fg) calc(var(--r) - .5px),var(--fg) calc(var(--r) + .5px),transparent calc(var(--r) + .5px)) 100% 0/calc(var(--r) + 3px) calc(var(--r) + 3px) no-repeat,radial-gradient(circle at 0 100%,transparent calc(var(--r) - .5px),var(--fg) calc(var(--r) - .5px),var(--fg) calc(var(--r) + .5px),transparent calc(var(--r) + .5px)) 0 100%/calc(var(--r) + 3px) calc(var(--r) + 3px) no-repeat,radial-gradient(circle at 100% 100%,transparent calc(var(--r) - .5px),var(--fg) calc(var(--r) - .5px),var(--fg) calc(var(--r) + .5px),transparent calc(var(--r) + .5px)) 100% 100%/calc(var(--r) + 3px) calc(var(--r) + 3px) no-repeat;background-origin:border-box;-webkit-mask:radial-gradient(circle at 0 0,transparent calc(var(--r) - .5px),#000 calc(var(--r) - .5px)) 0 0/50.5% 50.5% no-repeat,radial-gradient(circle at 100% 0,transparent calc(var(--r) - .5px),#000 calc(var(--r) - .5px)) 100% 0/50.5% 50.5% no-repeat,radial-gradient(circle at 0 100%,transparent calc(var(--r) - .5px),#000 calc(var(--r) - .5px)) 0 100%/50.5% 50.5% no-repeat,radial-gradient(circle at 100% 100%,transparent calc(var(--r) - .5px),#000 calc(var(--r) - .5px)) 100% 100%/50.5% 50.5% no-repeat;mask:radial-gradient(circle at 0 0,transparent calc(var(--r) - .5px),#000 calc(var(--r) - .5px)) 0 0/50.5% 50.5% no-repeat,radial-gradient(circle at 100% 0,transparent calc(var(--r) - .5px),#000 calc(var(--r) - .5px)) 100% 0/50.5% 50.5% no-repeat,radial-gradient(circle at 0 100%,transparent calc(var(--r) - .5px),#000 calc(var(--r) - .5px)) 0 100%/50.5% 50.5% no-repeat,radial-gradient(circle at 100% 100%,transparent calc(var(--r) - .5px),#000 calc(var(--r) - .5px)) 100% 100%/50.5% 50.5% no-repeat}
+.tcard .frame{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;fill:none;stroke:var(--fg);shape-rendering:geometricPrecision}
 .tcard .num{font-variant-numeric:lining-nums;display:flex;align-items:center;justify-content:center;gap:9px;font-family:"Cormorant Garamond",Georgia,serif;font-weight:700;font-size:16px;line-height:1;letter-spacing:.3em;text-indent:.3em;color:var(--fg)}
 .tcard .num.zero{font-family:"Be Vietnam Pro",system-ui,sans-serif;font-weight:600;font-size:15px}
 .tcard .num:before,.tcard .num:after{content:"";height:1px;width:26px;background:linear-gradient(90deg,transparent,var(--fg))}
@@ -90,34 +82,7 @@ button.ghost{text-align:center;color:var(--sub)}
 .pop .alt:hover{background:#f1effd;border-color:#f1effd}
 .h1s{font-size:26px;font-weight:700;margin:0 0 4px;line-height:1.25}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
-/* ===== Tông màu ===== */
-:root[data-tone="pinkpurple"]:not([data-theme="dark"]){--bg:hsl(300 45% 97%);--card:#fff;--ink:hsl(300 30% 20%);--sub:hsl(300 12% 45%);--line:hsl(300 35% 90%);--acc:hsl(300 34% 54%);--acc-soft:hsl(300 75% 94%)}
-@media (prefers-color-scheme:dark){:root[data-tone="pinkpurple"]:not([data-theme="light"]){--bg:hsl(300 35% 11%);--card:hsl(300 30% 16%);--ink:hsl(300 60% 96%);--sub:hsl(300 20% 72%);--line:hsl(300 25% 27%);--acc:hsl(300 36% 62%);--acc-soft:hsl(300 30% 23%)}}
-:root[data-theme="dark"][data-tone="pinkpurple"]{--bg:hsl(300 35% 11%);--card:hsl(300 30% 16%);--ink:hsl(300 60% 96%);--sub:hsl(300 20% 72%);--line:hsl(300 25% 27%);--acc:hsl(300 36% 62%);--acc-soft:hsl(300 30% 23%)}
-:root[data-tone="purple"]:not([data-theme="dark"]){--bg:#f6f5fb;--card:#fff;--ink:#2b2848;--sub:#6f6c8d;--line:#e6e4f2;--acc:#7c6cf0;--acc-soft:#ece9fd}
-@media (prefers-color-scheme:dark){:root[data-tone="purple"]:not([data-theme="light"]){--bg:#15142a;--card:#1e1d3a;--ink:#efeefc;--sub:#a8a6cb;--line:#33315a;--acc:#9a8cff;--acc-soft:#2a2850}}
-:root[data-theme="dark"][data-tone="purple"]{--bg:#15142a;--card:#1e1d3a;--ink:#efeefc;--sub:#a8a6cb;--line:#33315a;--acc:#9a8cff;--acc-soft:#2a2850}
-:root[data-tone="blue"]:not([data-theme="dark"]){--bg:hsl(212 45% 97%);--card:#fff;--ink:hsl(212 30% 20%);--sub:hsl(212 12% 45%);--line:hsl(212 35% 90%);--acc:hsl(212 34% 54%);--acc-soft:hsl(212 75% 94%)}
-@media (prefers-color-scheme:dark){:root[data-tone="blue"]:not([data-theme="light"]){--bg:hsl(212 35% 11%);--card:hsl(212 30% 16%);--ink:hsl(212 60% 96%);--sub:hsl(212 20% 72%);--line:hsl(212 25% 27%);--acc:hsl(212 36% 62%);--acc-soft:hsl(212 30% 23%)}}
-:root[data-theme="dark"][data-tone="blue"]{--bg:hsl(212 35% 11%);--card:hsl(212 30% 16%);--ink:hsl(212 60% 96%);--sub:hsl(212 20% 72%);--line:hsl(212 25% 27%);--acc:hsl(212 36% 62%);--acc-soft:hsl(212 30% 23%)}
-:root[data-tone="teal"]:not([data-theme="dark"]){--bg:hsl(172 45% 97%);--card:#fff;--ink:hsl(172 30% 20%);--sub:hsl(172 12% 45%);--line:hsl(172 35% 90%);--acc:hsl(172 34% 54%);--acc-soft:hsl(172 75% 94%)}
-@media (prefers-color-scheme:dark){:root[data-tone="teal"]:not([data-theme="light"]){--bg:hsl(172 35% 11%);--card:hsl(172 30% 16%);--ink:hsl(172 60% 96%);--sub:hsl(172 20% 72%);--line:hsl(172 25% 27%);--acc:hsl(172 36% 62%);--acc-soft:hsl(172 30% 23%)}}
-:root[data-theme="dark"][data-tone="teal"]{--bg:hsl(172 35% 11%);--card:hsl(172 30% 16%);--ink:hsl(172 60% 96%);--sub:hsl(172 20% 72%);--line:hsl(172 25% 27%);--acc:hsl(172 36% 62%);--acc-soft:hsl(172 30% 23%)}
-:root[data-tone="orange"]:not([data-theme="dark"]){--bg:hsl(24 45% 97%);--card:#fff;--ink:hsl(24 30% 20%);--sub:hsl(24 12% 45%);--line:hsl(24 35% 90%);--acc:hsl(24 34% 54%);--acc-soft:hsl(24 75% 94%)}
-@media (prefers-color-scheme:dark){:root[data-tone="orange"]:not([data-theme="light"]){--bg:hsl(24 35% 11%);--card:hsl(24 30% 16%);--ink:hsl(24 60% 96%);--sub:hsl(24 20% 72%);--line:hsl(24 25% 27%);--acc:hsl(24 36% 62%);--acc-soft:hsl(24 30% 23%)}}
-:root[data-theme="dark"][data-tone="orange"]{--bg:hsl(24 35% 11%);--card:hsl(24 30% 16%);--ink:hsl(24 60% 96%);--sub:hsl(24 20% 72%);--line:hsl(24 25% 27%);--acc:hsl(24 36% 62%);--acc-soft:hsl(24 30% 23%)}
-:root[data-tone="rose"]:not([data-theme="dark"]){--bg:hsl(342 45% 97%);--card:#fff;--ink:hsl(342 30% 20%);--sub:hsl(342 12% 45%);--line:hsl(342 35% 90%);--acc:hsl(342 34% 54%);--acc-soft:hsl(342 75% 94%)}
-@media (prefers-color-scheme:dark){:root[data-tone="rose"]:not([data-theme="light"]){--bg:hsl(342 35% 11%);--card:hsl(342 30% 16%);--ink:hsl(342 60% 96%);--sub:hsl(342 20% 72%);--line:hsl(342 25% 27%);--acc:hsl(342 36% 62%);--acc-soft:hsl(342 30% 23%)}}
-:root[data-theme="dark"][data-tone="rose"]{--bg:hsl(342 35% 11%);--card:hsl(342 30% 16%);--ink:hsl(342 60% 96%);--sub:hsl(342 20% 72%);--line:hsl(342 25% 27%);--acc:hsl(342 36% 62%);--acc-soft:hsl(342 30% 23%)}
 button.primary{color:#fff}
-.tone{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px}
-.tone .tbtn{width:auto;margin:0;padding:8px 14px;border-radius:999px;font-size:14px;background:var(--card);display:inline-flex;align-items:center;gap:8px}
-.tone .tbtn i{width:16px;height:16px;border-radius:50%;background:var(--acc);display:inline-block}
-.tone .sw{display:none;gap:8px;align-items:center;flex-wrap:wrap}
-.tone.open .sw{display:flex}
-.tone .sw button{width:30px;height:30px;padding:0;margin:0;border-radius:50%;border:3px solid var(--card);box-shadow:0 0 0 1.5px var(--line)}
-.tone .sw button.on{box-shadow:0 0 0 2.5px var(--ink)}
-.tone .sw button:hover{background:inherit;transform:scale(1.1)}
 .quote{font-size:17px;font-weight:500;color:var(--ink);margin:0 0 14px}
 .introimg{width:100%;aspect-ratio:16/10;border-radius:18px;margin:6px 0 18px;overflow:hidden;background:var(--acc-soft);border:1.5px dashed var(--line);display:grid;place-items:center;color:var(--sub);font-size:15px}
 .introimg img{width:100%;height:auto;display:block}
@@ -134,7 +99,7 @@ button.back{margin-top:2px}
 </style>
 </head>
 <body>
-<div class="wrap"><div class="tone" id="tone"></div><div class="card" id="app"></div></div>
+<div class="wrap"><div class="card" id="app"></div></div>
 
 <script>(function (root) {
 var AX = ["A", "B", "C", "D", "E", "F", "G", "H"];
@@ -312,14 +277,6 @@ window.QUIZ_MAIN = function () {
     if (d) { if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4; h *= 60; if (h < 0) h += 360; }
     return Math.round(h);
   }
-  function applyTheme(id) {
-    var c = colorOf(id), st = document.documentElement.style;
-    if (!c) { clearTheme(); return; }
-    st.setProperty("--cc", c); st.setProperty("--acc", c);
-    st.setProperty("--acc-soft", "color-mix(in srgb, var(--cc) 16%, var(--card))");
-    st.setProperty("--bg", "color-mix(in srgb, var(--cc) 10%, var(--card))");
-  }
-  function clearTheme() { var st = document.documentElement.style; ["--cc", "--acc", "--acc-soft", "--bg"].forEach(function (k) { st.removeProperty(k); }); }
   // Chọn ngẫu nhiên một câu nhận xét. Câu thứ 1 đi cùng ava 1, câu thứ 2 đi cùng ava 2, câu thứ 3 quay lại ava 1...
   function pickSay(id) {
     var a = (CC[id] || {}).say; a = Array.isArray(a) ? a : (a ? [a] : []);
@@ -388,20 +345,50 @@ window.QUIZ_MAIN = function () {
   function ini(id) { return id === "none" ? "?" : ch(id).name.charAt(0).toUpperCase(); }
   function top() { window.scrollTo({ top: 0 }); }
 
-  function start() {
+  // ===== Lưu bài đang làm và kết quả (trong trình duyệt của người làm) =====
+  var done = null; // có giá trị khi đã ra kết quả: { tb: đáp án câu phụ, counted: đã gọi bộ đếm, n: số đếm }
+  var SAVE_KEY = "quizSave:" + location.pathname;
+  // Dấu nhận biết bộ câu hỏi: sửa câu hỏi/đáp án thì bản lưu cũ bị bỏ, tránh ghép nhầm đáp án
+  function quizSig() {
+    var t = JSON.stringify(D.questions.map(function (q) { return [q.text, q.multi || 1, q.ans.map(function (a) { return a.t; })]; })), h = 0;
+    for (var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0;
+    return D.questions.length + ":" + h;
+  }
+  function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
+  function save() {
+    if (!answers.some(function (a) { return a.length; })) return clearSave();
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify({ sig: quizSig(), order: order, answers: answers, cur: Math.min(cur, order.length - 1), done: done })); } catch (e) {}
+  }
+  function loadSave() {
+    try {
+      var v = JSON.parse(localStorage.getItem(SAVE_KEY)), n = D.questions.length;
+      if (v && v.sig === quizSig() && v.order.length === n && v.answers.length === n && v.cur >= 0 && v.cur < n) return v;
+    } catch (e) {}
+    return null;
+  }
+  function reset() {
     order = shuffle(D.questions.map(function (_, i) { return i; }));
     answers = D.questions.map(function () { return []; });
-    cur = 0; clearTheme(); intro();
+    cur = 0; multiSel = []; done = null;
   }
+  function start() { reset(); intro(); }
+  function restart() { clearSave(); start(); }
 
   function intro() {
+    var saved = loadSave();
     var img = INTRO_IMG ? '<img src="' + esc(INTRO_IMG) + '" alt="" onload="this.parentNode.classList.add(\'loaded\')" onerror="this.parentNode.textContent=\'Hình ảnh\'">' : 'Hình ảnh';
     app.innerHTML = '<h1>13 con người, 13 ngã rẽ khác biệt.</h1>' +
       '<p class="quote">Khi đứng trước khả năng lựa chọn, nhất định đừng để bản thân hối hận</p>' +
       '<p>Cùng tìm hiểu xem bạn sẽ giống ai nhất trong 13 Anh Kiệt nhé! Câu hỏi sẽ được xáo trộn ngẫu nhiên, hãy xem kĩ câu hỏi và tất cả các đáp án~</p>' +
       '<div class="introimg">' + img + '</div>' +
-      '<button class="primary" id="go">Bắt đầu</button>';
-    document.getElementById("go").onclick = question;
+      (saved ? '<p class="hint" style="margin:0 0 10px">' + (saved.done ? 'Bạn đã làm quiz này rồi.' : 'Bạn đang làm dở: đã trả lời ' + saved.answers.filter(function (a) { return a.length; }).length + ' trên ' + D.questions.length + ' câu.') + '</p>' : '') +
+      '<button class="primary" id="go">' + (saved ? (saved.done ? 'Xem lại kết quả' : 'Làm tiếp') : 'Bắt đầu') + '</button>' +
+      (saved ? '<button class="ghost" id="fresh" style="margin-top:10px">Làm lại từ đầu</button>' : '');
+    document.getElementById("go").onclick = function () {
+      if (saved) { order = saved.order; answers = saved.answers; cur = saved.cur; done = saved.done || null; }
+      if (done) showSaved(); else question();
+    };
+    if (saved) document.getElementById("fresh").onclick = function () { clearSave(); reset(); question(); };
   }
 
   function answered(i) { var v = answers[order[i]]; return !!(v && v.length); }
@@ -417,12 +404,14 @@ window.QUIZ_MAIN = function () {
 
   function question() {
     if (cur >= order.length) return result();
+    done = null;
     var qi = order[cur], q = D.questions[qi], max = q.multi || 1;
     var done = 0, i;
     for (i = 0; i < order.length; i++) if (answered(i) && i !== cur) done++;
     var others = done === order.length - 1;
     var last = cur === order.length - 1 && others;
     multiSel = (answers[qi] || []).slice();
+    save();
     var nav = order.map(function (_, i) {
       return '<button type="button" data-i="' + i + '" class="' + (answered(i) ? "done" : "") + (i === cur ? " now" : "") + '" aria-label="Câu ' + (i + 1) + (answered(i) ? ", đã chọn" : "") + '"' + (i === cur ? ' aria-current="step"' : '') + '><i></i></button>';
     }).join("");
@@ -446,6 +435,7 @@ window.QUIZ_MAIN = function () {
         } else if (k > -1) { multiSel.splice(k, 1); b.classList.remove("sel"); b.setAttribute("aria-pressed", "false"); }
         else if (multiSel.length < max) { multiSel.push(ai); b.classList.add("sel"); b.setAttribute("aria-pressed", "true"); }
         nx.disabled = !multiSel.length;
+        answers[qi] = multiSel.slice(); save(); // lưu ngay khi bấm chọn
       };
       btns.push(b); opts.appendChild(b);
     });
@@ -462,6 +452,7 @@ window.QUIZ_MAIN = function () {
   }
 
   // ---- popup thẻ bài ----
+  var FRAME = '<svg class="frame" viewBox="0 0 330 495" preserveAspectRatio="none" aria-hidden="true"><rect x="6.75" y="6.75" width="316.5" height="481.5" rx="11.25" stroke-width="1.5"/><path d="M29.5 11.5H300.5A18 18 0 0 0 318.5 29.5V465.5A18 18 0 0 0 300.5 483.5H29.5A18 18 0 0 0 11.5 465.5V29.5A18 18 0 0 0 29.5 11.5Z" stroke-width="1"/></svg>';
   function openCard(id, phaseIdx) {
     closeCard(true);
     var c = id === "none" ? null : ch(id), ph = c ? c.phases[phaseIdx || 0] : null;
@@ -472,7 +463,7 @@ window.QUIZ_MAIN = function () {
     var ov = document.createElement("div");
     ov.className = "ov"; ov.id = "ov"; ov.setAttribute("role", "dialog"); ov.setAttribute("aria-modal", "true"); ov.setAttribute("aria-label", "Thẻ " + nameOf(id));
     ov.innerHTML = '<div class="pop" style="--h:' + hue(id) + (cc ? ';--cc:' + cc : '') + '">' +
-      '<div class="tcard" style="' + cardTheme(cc, hue(id)) + '"><div class="num' + (numOf(id) === "0" ? " zero" : "") + '">' + esc(numOf(id)) + '</div><div class="art">' + (img ? '<img src="' + esc(img) + '" alt="' + esc(nameOf(id)) + '">' : '<span class="init">' + ini(id) + '</span>') + '</div>' +
+      '<div class="tcard" style="' + cardTheme(cc, hue(id)) + '">' + FRAME + '<div class="num' + (numOf(id) === "0" ? " zero" : "") + '">' + esc(numOf(id)) + '</div><div class="art">' + (img ? '<img src="' + esc(img) + '" alt="' + esc(nameOf(id)) + '">' : '<span class="init">' + ini(id) + '</span>') + '</div>' +
       '<div class="plate"><div class="orn"><i></i></div><div class="nm" style="' + nmStyle(nameOf(id)) + '">' + esc(nameOf(id)) + '</div>' +  (bl ? '<div class="lb">' + esc(bl) + '</div>' : '') + '</div></div>' +
       '<div class="say"><div class="stk">' + (stk ? '<img src="' + esc(stk) + '" alt="">' : ini(id)) + '</div><div class="bub">' + esc(say) + '</div></div>' +
       '<button class="primary" id="cl">Đóng</button><button class="alt" id="rs">Không giống! Lại đi</button></div>';
@@ -492,7 +483,7 @@ window.QUIZ_MAIN = function () {
     document.body.appendChild(ov);
     ov.onclick = function (e) { if (e.target === ov) closeCard(); };
     document.getElementById("cl").onclick = function () { closeCard(); };
-    document.getElementById("rs").onclick = function () { closeCard(true); start(); };
+    document.getElementById("rs").onclick = function () { closeCard(true); restart(); };
     document.getElementById("cl").focus();
   }
   function closeCard(quiet) {
@@ -507,6 +498,14 @@ window.QUIZ_MAIN = function () {
     var qs = E.tbNeeded ? E.tbNeeded(D, R) : [];
     if (!qs.length) return showResult(R);
     tbAsk(R, qs, 0, []);
+  }
+
+  // Tính lại kết quả từ đáp án (và câu phụ) đã lưu
+  function showSaved() {
+    var R = E.evaluate(D, answers), qs = E.tbNeeded ? E.tbNeeded(D, R) : [];
+    if (!qs.length) return showResult(R);
+    if (done.tb && done.tb.length === qs.length) return showResult(E.tbApply(D, R, qs, done.tb), done.tb);
+    done = null; tbAsk(R, qs, 0, []); // câu phụ đã thay đổi thì hỏi lại
   }
 
   function tbAsk(R, qs, i, picks) {
@@ -530,7 +529,7 @@ window.QUIZ_MAIN = function () {
     nx.onclick = function () {
       picks[i] = [sel];
       if (i < qs.length - 1) tbAsk(R, qs, i + 1, picks);
-      else showResult(E.tbApply(D, R, qs, picks));
+      else showResult(E.tbApply(D, R, qs, picks), picks);
     };
     document.getElementById("tbback").onclick = function () {
       if (i > 0) tbAsk(R, qs, i - 1, picks);
@@ -538,7 +537,9 @@ window.QUIZ_MAIN = function () {
     };
   }
 
-  function showResult(R) {
+  function showResult(R, tbPicks) {
+    var rec = done || { counted: false, n: null };
+    rec.tb = tbPicks || null; done = rec;
     var t0 = R.ranked[0];
     var id = R.unknown ? "none" : t0.id, pi = R.unknown ? 0 : t0.pi, ph = R.unknown ? null : ch(id).phases[pi];
     var html = '<p class="tag">Kết quả của bạn</p>';
@@ -557,37 +558,23 @@ window.QUIZ_MAIN = function () {
       '<div style="margin-top:22px"><button class="ghost" id="again">Làm lại</button></div>';
     app.innerHTML = html; top();
     document.getElementById("again2").onclick = function () { openCard(id, pi); };
-    document.getElementById("again").onclick = start;
-    applyTheme(id);
+    document.getElementById("again").onclick = restart;
     var cntEl = document.getElementById("cnt");
-    countHit(id, function (n) {
+    function showCount(n) {
       if (!document.body.contains(cntEl)) return;
       cntEl.innerHTML = 'Đã có <b>' + n + '</b> người làm ra kết quả ' + (id === "none" ? 'không giống ai' : 'giống ' + esc(ch(id).name)) + ' (tính cả bạn).';
       cntEl.hidden = false;
+    }
+    // Xem lại kết quả đã lưu thì không đếm thêm lần nữa, chỉ hiện số đã nhận lúc làm xong
+    var first = !rec.counted;
+    rec.counted = true; save();
+    if (first) countHit(id, function (n) {
+      rec.n = n; if (done === rec) save();
+      showCount(n);
     });
+    else if (rec.n != null) showCount(rec.n);
     openCard(id, pi);
   }
-
-  // ===== Chọn tông màu =====
-  var TONES = [{"k": "pinkpurple", "n": "Tím hồng", "c": "hsl(300 33% 62%)"}, {"k": "purple", "n": "Tím", "c": "#7c6cf0"}, {"k": "blue", "n": "Xanh dương", "c": "hsl(212 36% 58%)"}, {"k": "teal", "n": "Xanh ngọc", "c": "hsl(172 30% 44%)"}, {"k": "orange", "n": "Cam", "c": "hsl(24 48% 60%)"}, {"k": "rose", "n": "Hồng", "c": "hsl(342 40% 64%)"}];
-  (function () {
-    var root = document.documentElement, box = document.getElementById("tone"), cur = "pinkpurple";
-    try { var sv = localStorage.getItem("quizTone"); if (sv && TONES.some(function (t) { return t.k === sv; })) cur = sv; } catch (e) {}
-    function apply(k) {
-      cur = k; root.setAttribute("data-tone", k);
-      try { localStorage.setItem("quizTone", k); } catch (e) {}
-      draw();
-    }
-    function draw() {
-      var open = box.classList.contains("open");
-      box.innerHTML = '<div class="sw" role="group" aria-label="Chọn theme">' + TONES.map(function (t) {
-        return '<button type="button" data-k="' + t.k + '" class="' + (t.k === cur ? "on" : "") + '" style="background:' + t.c + '" title="' + t.n + '" aria-label="' + t.n + '" aria-pressed="' + (t.k === cur) + '"></button>';
-      }).join("") + '</div><button type="button" class="tbtn" id="tbtn" aria-expanded="' + open + '"><i></i>Theme</button>';
-      Array.prototype.forEach.call(box.querySelectorAll(".sw button"), function (b) { b.onclick = function () { apply(b.getAttribute("data-k")); }; });
-      document.getElementById("tbtn").onclick = function () { box.classList.toggle("open"); draw(); };
-    }
-    root.setAttribute("data-tone", cur); draw();
-  })();
 
   start();
 };
