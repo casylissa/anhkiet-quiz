@@ -71,6 +71,20 @@ button.ghost{text-align:center;color:var(--sub)}
 .tcard .orn i{width:7px;height:7px;transform:rotate(45deg);background:var(--fg)}
 .tcard .nm{white-space:nowrap;font-family:"Cormorant Garamond","Be Vietnam Pro",Georgia,serif;font-size:25px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;line-height:1.1;color:var(--fg)}
 .tcard .lb{font-size:12.5px;line-height:1.45;color:var(--fg2);margin-top:5px}
+.spanel{width:100%;max-width:380px;margin:auto;background:#fff;color:#2b2848;border-radius:20px;padding:20px 18px 14px;box-shadow:0 14px 32px rgba(20,16,50,.35);animation:rise .35s cubic-bezier(.2,.9,.3,1.2)}
+.spanel h3{margin:0 0 4px;font-size:18px;text-align:center}
+.spanel .sub{margin:0 0 14px;font-size:12.5px;text-align:center;color:var(--sub)}
+.spanel .sload{padding:26px 0;text-align:center;color:var(--sub);font-size:14px}
+.srow{display:flex;align-items:center;gap:8px;margin:0 0 7px;font-size:13.5px}
+.srow .n{width:96px;flex-shrink:0;line-height:1.25}
+.srow .t{flex:1;height:10px;background:var(--line);border-radius:5px;overflow:hidden}
+.srow .f{display:block;height:100%;border-radius:5px;min-width:2px}
+.srow .c{width:30px;text-align:right;font-weight:600}
+.srow .p{width:38px;text-align:right;color:var(--sub);font-size:12.5px}
+.srow.mine .n{font-weight:700}
+.srow.mine .n:after{content:" (bạn)";font-weight:500;color:var(--acc)}
+.spanel .tot{margin:10px 0 12px;font-size:12.5px;text-align:center;color:var(--sub)}
+.spanel button.primary{margin-bottom:6px}
 .cnt{margin:14px 0 0;font-size:15px}
 .cnt b{color:var(--acc)}
 /* đáy khung chừa đúng bằng hai bên */
@@ -313,9 +327,8 @@ window.QUIZ_MAIN = function () {
       .then(function (j) { if (!j || typeof j.value !== "number") throw new Error("lỗi bộ đếm"); cb(j.value); })
       .catch(function () { if (fail) fail(); });
   }
-  // ===== Mỗi trình duyệt chỉ được tính một lần =====
-  // Nhớ riêng (bấm "Làm lại" không xóa): results = đã tính vào tổng, id = kết quả đang được tính, drop = các lượt trừ chưa gửi được.
-  // Bộ đếm chỉ cộng được, nên "trừ kết quả cũ" = cộng vào "bo-<id>". Số hiển thị = "kq-<id>" trừ "bo-<id>".
+  // ===== Chỉ tính khi kết quả đổi so với lần trước =====
+  // Nhớ riêng (bấm "Làm lại" không xóa): id = kết quả gần nhất đã được tính. Số hiển thị = "kq-<id>".
   var TALLY_KEY = "quizCounted:" + location.pathname, tallyMem = null;
   function tallyLoad() {
     if (!tallyMem) { try { tallyMem = JSON.parse(localStorage.getItem(TALLY_KEY)); } catch (e) {} }
@@ -323,30 +336,17 @@ window.QUIZ_MAIN = function () {
     return tallyMem;
   }
   function tallySave() { try { localStorage.setItem(TALLY_KEY, JSON.stringify(tallyMem)); } catch (e) {} }
-  function netCount(id, plus, cb) {
-    counter("get", "bo-" + id, function (minus) { cb(Math.max(plus - minus, tallyLoad().id === id ? 1 : 0)); });
-  }
-  function flushDrops(then) {
-    var m = tallyLoad(), list = m.drop.splice(0), left = list.length;
-    tallySave();
-    if (!left) return then();
-    var end = function () { if (!--left) then(); };
-    list.forEach(function (old) { counter("hit", "bo-" + old, end, function () { m.drop.push(old); tallySave(); end(); }); });
-  }
+  // Làm lại mà ra kết quả KHÁC lần trước thì tính thêm một lượt cho kết quả mới (không trừ kết quả cũ); ra lại đúng kết quả cũ thì không tính.
   function tally(id, show) {
-    var read = function () { counter("get", "kq-" + id, function (n) { netCount(id, n, show); }); };
+    var read = function () { counter("get", "kq-" + id, show); };
     if (LOCAL || (CT.counter || {}).enabled === false) return read(); // chạy thử thì không ghi nhận gì
     var m = tallyLoad();
-    if (!m.results) {
-      m.results = true; tallySave();
-      counter("hit", "results", function (n) { setStat("results", n); }, function () { m.results = false; tallySave(); });
-    }
-    if (m.id === id) return flushDrops(read); // ra lại kết quả cũ: không đổi gì
+    if (m.id === id) return read(); // ra lại kết quả cũ: không đổi gì
     var old = m.id;
-    m.id = id; tallySave();
+    m.id = id; m.results = true; m.drop = []; tallySave();
     counter("hit", "kq-" + id, function (n) {
-      if (old) m.drop.push(old);
-      flushDrops(function () { netCount(id, n, show); });
+      counter("hit", "results", function (r) { setStat("results", r); });
+      show(n);
     }, function () { m.id = old; tallySave(); });
   }
   var stats = { views: null, results: null };
@@ -665,6 +665,43 @@ window.QUIZ_MAIN = function () {
     };
   }
 
+  // ===== Bảng thống kê "người khác ra gì" — chỉ ĐỌC bộ đếm (get), không ghi gì nên không ảnh hưởng số đếm =====
+  function openStats(mine) {
+    var old = document.getElementById("sov"); if (old) old.remove();
+    var ov = document.createElement("div");
+    ov.className = "ov"; ov.id = "sov"; ov.setAttribute("role", "dialog"); ov.setAttribute("aria-modal", "true"); ov.setAttribute("aria-label", "Thống kê kết quả");
+    ov.innerHTML = '<div class="spanel"><h3>Mọi người ra kết quả gì?</h3><p class="sub">Thống kê từ những người đã làm quiz</p><div id="sbody" class="sload">Đang tải số liệu…</div><button class="primary" id="sclose">Đóng</button></div>';
+    var prev = document.activeElement;
+    function close() { document.removeEventListener("keydown", onKey); ov.remove(); if (prev && prev.focus) prev.focus(); }
+    function onKey(e) { if (e.key === "Escape") close(); }
+    document.addEventListener("keydown", onKey);
+    ov.onclick = function (e) { if (e.target === ov) close(); };
+    document.body.appendChild(ov);
+    var body = ov.querySelector("#sbody"), btn = ov.querySelector("#sclose");
+    btn.onclick = close; btn.focus();
+    if ((CT.counter || {}).enabled === false) { body.textContent = "Thống kê đang tắt."; return; }
+    var ids = D.characters.map(function (c) { return c.id; }).concat("none"), data = {}, left = ids.length;
+    function render() {
+      if (!document.body.contains(ov)) return;
+      var rows = ids.map(function (id) {
+        var d = data[id], net = d.kq == null ? null : Math.max(d.kq, tallyLoad().id === id ? 1 : 0);
+        return { id: id, n: net };
+      }).filter(function (r) { return r.n != null; });
+      if (!rows.length) { body.textContent = "Không tải được số liệu, bạn thử lại sau nhé."; return; }
+      rows.sort(function (a, b) { return b.n - a.n; });
+      var total = rows.reduce(function (t, r) { return t + r.n; }, 0), max = rows[0].n || 1, f = function (n) { return n.toLocaleString("vi-VN"); };
+      body.className = "";
+      body.innerHTML = rows.map(function (r) {
+        return '<div class="srow' + (r.id === mine ? ' mine' : '') + '"><span class="n">' + esc(nameOf(r.id)) + '</span><span class="t"><span class="f" style="width:' + Math.round(r.n / max * 100) + '%;background:hsl(' + hue(r.id) + ' 65% 58%)"></span></span><span class="c">' + f(r.n) + '</span><span class="p">' + (total ? Math.round(r.n / total * 100) : 0) + '%</span></div>';
+      }).join("") + '<p class="tot">Tổng <b>' + f(total) + '</b> lượt ra kết quả (làm lại mà ra kết quả khác được tính thêm)</p>';
+    }
+    function done() { if (!--left) render(); }
+    ids.forEach(function (id) {
+      data[id] = { kq: null };
+      counter("get", "kq-" + id, function (v) { data[id].kq = v; done(); }, done);
+    });
+  }
+
   function showResult(R, tbPicks) {
     var rec = done || { counted: false };
     rec.tb = tbPicks || null; done = rec;
@@ -683,14 +720,16 @@ window.QUIZ_MAIN = function () {
     }
     if (R.daily.id !== R.pressure.id) html += '<p class="note">Ngày thường bạn giống <b>' + esc(R.daily.name) + '</b>, nhưng khi bị dồn vào chân tường lại giống <b>' + esc(R.pressure.name) + '</b>.</p>';
     html += '<p class="cnt" id="cnt" hidden></p><button class="primary" id="again2" style="margin-top:18px">Xem lại thẻ của bạn</button>' +
+      '<button class="ghost" id="others" style="margin-top:2px">Xem người khác ra gì</button>' +
       '<div style="margin-top:22px"><button class="ghost" id="again">Làm lại</button></div>';
     app.innerHTML = html; drawStats(); top();
     document.getElementById("again2").onclick = function () { openCard(id, pi); };
+    document.getElementById("others").onclick = function () { openStats(id); };
     document.getElementById("again").onclick = restart;
     var cntEl = document.getElementById("cnt");
     function showCount(n) {
       if (!document.body.contains(cntEl)) return;
-      cntEl.innerHTML = 'Đã có <b>' + n + '</b> người làm ra kết quả ' + (id === "none" ? 'không giống ai' : 'giống ' + esc(ch(id).name)) + ' (tính cả bạn).';
+      cntEl.innerHTML = 'Đã có <b>' + n + '</b> lượt ra kết quả ' + (id === "none" ? 'không giống ai' : 'giống ' + esc(ch(id).name)) + ' (tính cả bạn).';
       cntEl.hidden = false;
     }
     // Bản trước đã đếm lượt này rồi (có trong bài lưu) thì ghi nhận lại, không đếm nữa
