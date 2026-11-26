@@ -755,6 +755,10 @@ h2{font-size:16px;margin:20px 0 6px}
    "hi": "Vị tha, sẵn sàng hy sinh"
   }
  ],
+ "biasAdjust": {
+  "kosma": -2,
+  "kevin": 0.5
+ },
  "gain": 1.5,
  "sigCap": 16,
  "flatRange": 0.45,
@@ -764,7 +768,7 @@ h2{font-size:16px;margin:20px 0 6px}
  },
  "calibration": {
   "bias": {
-   "kevin": -7,
+   "kevin": -6.5,
    "elysia": -5.2,
    "aponia": -7.3,
    "eden": -11.9,
@@ -772,7 +776,7 @@ h2{font-size:16px;margin:20px 0 6px}
    "kalpas": -9.3,
    "su": 0,
    "sakura": -3.9,
-   "kosma": -9,
+   "kosma": -11,
    "mobius": -3.1,
    "griseo": -18,
    "hua": -8.2,
@@ -3094,6 +3098,8 @@ function quizCalibrate(D0, opts) {
   }
   var mxb = Math.max.apply(null, bias);
   bias = bias.map(function (b) { return b - mxb; });
+  var adj = D.biasAdjust || {};
+  bias = bias.map(function (b, i) { return b + (+adj[C[i].id] || 0); });
 
   var tops = [], flatN = 0;
   plays.forEach(function (pl) {
