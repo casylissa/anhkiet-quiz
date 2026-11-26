@@ -756,11 +756,17 @@ h2{font-size:16px;margin:20px 0 6px}
   }
  ],
  "biasAdjust": {
-  "kosma": -1.5,
-  "kevin": 0.5
+  "kosma": -2,
+  "kevin": 0.5,
+  "aponia": -1
  },
  "gain": 1.5,
  "sigCap": 16,
+ "earlyChance": 0.3,
+ "earlyChanceBy": {
+  "kosma": 0.2,
+  "pardo": 0.33
+ },
  "flatRange": 0.45,
  "setNames": {
   "1": "Ngày thường",
@@ -770,13 +776,13 @@ h2{font-size:16px;margin:20px 0 6px}
   "bias": {
    "kevin": -8.3,
    "elysia": -4.7,
-   "aponia": -7.6,
+   "aponia": -8.6,
    "eden": -12.6,
    "villv": -13.5,
    "kalpas": -9.1,
    "su": 0,
    "sakura": -4.6,
-   "kosma": -9.4,
+   "kosma": -9.9,
    "mobius": -3.6,
    "griseo": -18.7,
    "hua": -9.9,
@@ -961,7 +967,7 @@ h2{font-size:16px;margin:20px 0 6px}
    "phases": [
     {
      "label": "lúc ban đầu",
-     "v": [4,1,4,1,3,2,3,3],
+     "v": [4,1,5,1,3,2,3,2],
      "desc": "Tinh nghịch, ham vui, như chú mèo con. Tốt với chó mèo. Thích đồ vật lấp lánh, thích sưu tầm."
     },
     {
@@ -1016,6 +1022,9 @@ h2{font-size:16px;margin:20px 0 6px}
      },
      "g": {
       "griseo": 1
+     },
+     "e": {
+      "griseo": 1
      }
     }
    ]
@@ -1035,6 +1044,9 @@ h2{font-size:16px;margin:20px 0 6px}
      "g": {
       "pardo": 2,
       "mobius": 1
+     },
+     "e": {
+      "pardo": 1
      }
     },
     {
@@ -1196,6 +1208,9 @@ h2{font-size:16px;margin:20px 0 6px}
       "kevin": 1,
       "elysia": 1,
       "villv": 1
+     },
+     "e": {
+      "kevin": 1
      }
     }
    ]
@@ -1327,6 +1342,10 @@ h2{font-size:16px;margin:20px 0 6px}
      "g": {
       "eden": 2,
       "kevin": 1
+     },
+     "e": {
+      "kevin": 1,
+      "eden": 1
      }
     },
     {
@@ -1357,6 +1376,9 @@ h2{font-size:16px;margin:20px 0 6px}
      "g": {
       "pardo": 2,
       "griseo": 1
+     },
+     "e": {
+      "pardo": 1
      }
     },
     {
@@ -1385,6 +1407,9 @@ h2{font-size:16px;margin:20px 0 6px}
      },
      "g": {
       "griseo": 2
+     },
+     "e": {
+      "griseo": 1
      }
     },
     {
@@ -1395,6 +1420,9 @@ h2{font-size:16px;margin:20px 0 6px}
      },
      "g": {
       "kosma": 2
+     },
+     "e": {
+      "kosma": 1
      }
     },
     {
@@ -1446,6 +1474,9 @@ h2{font-size:16px;margin:20px 0 6px}
      },
      "g": {
       "hua": 2
+     },
+     "e": {
+      "hua": 1
      }
     },
     {
@@ -1506,6 +1537,9 @@ h2{font-size:16px;margin:20px 0 6px}
      },
      "g": {
       "pardo": 2
+     },
+     "e": {
+      "pardo": 1
      }
     },
     {
@@ -1586,6 +1620,9 @@ h2{font-size:16px;margin:20px 0 6px}
      "g": {
       "kevin": 1,
       "elysia": 1
+     },
+     "e": {
+      "kevin": 1
      }
     },
     {
@@ -1611,6 +1648,9 @@ h2{font-size:16px;margin:20px 0 6px}
      },
      "g": {
       "eden": 2
+     },
+     "e": {
+      "eden": 1
      }
     },
     {
@@ -1775,6 +1815,9 @@ h2{font-size:16px;margin:20px 0 6px}
      },
      "g": {
       "griseo": 2
+     },
+     "e": {
+      "griseo": 1
      }
     },
     {
@@ -1832,6 +1875,9 @@ h2{font-size:16px;margin:20px 0 6px}
      "g": {
       "elysia": 2,
       "eden": 2
+     },
+     "e": {
+      "eden": 1
      }
     },
     {
@@ -2033,6 +2079,9 @@ h2{font-size:16px;margin:20px 0 6px}
      },
      "g": {
       "hua": 2
+     },
+     "e": {
+      "hua": 1
      }
     },
     {
@@ -2090,6 +2139,9 @@ h2{font-size:16px;margin:20px 0 6px}
       "H": 1
      },
      "g": {
+      "kosma": 1
+     },
+     "e": {
       "kosma": 1
      }
     },
@@ -2312,6 +2364,9 @@ h2{font-size:16px;margin:20px 0 6px}
      },
      "g": {
       "kosma": 1
+     },
+     "e": {
+      "kosma": 1
      }
     }
    ]
@@ -2429,6 +2484,9 @@ h2{font-size:16px;margin:20px 0 6px}
      "g": {
       "kevin": 1,
       "hua": 2
+     },
+     "e": {
+      "hua": 1
      }
     },
     {
@@ -3061,7 +3119,7 @@ function quizCalibrate(D0, opts) {
 
   var plays = [], p, nC = C.length;
   for (p = 0; p < N; p++) {
-    var num = {}, den = {}, sig = {};
+    var num = {}, den = {}, sig = {}, early = {};
     AX.forEach(function (a) { num[a] = 0; den[a] = 0; });
     Q.forEach(function (q, qi) {
       if (!q.ans.length) return;
@@ -3071,17 +3129,20 @@ function quizCalibrate(D0, opts) {
         var a = q.ans[i], z;
         for (z in (a.s || {})) d[z] = (d[z] || 0) + a.s[z] / k;
         for (z in (a.g || {})) sig[z] = (sig[z] || 0) + a.g[z] / k;
+        for (z in (a.e || {})) if (a.e[z]) early[z] = 1;
       });
       AX.forEach(function (a) { if (!M[qi][a]) return; num[a] += (d[a] || 0) * q.w; den[a] += q.w; });
     });
     var V = AX.map(function (a) { return den[a] > 0 ? clamp(3 + D.gain * num[a] / den[a], 1, 5) : 3; });
     var flat = Math.max.apply(null, V.map(function (v) { return Math.abs(v - 3); })) < D.flatRange;
+    var phs = [];
     var base = C.map(function (ch) {
-      var best = -1e9;
-      ch.phases.forEach(function (ph) { best = Math.max(best, sim(V, ph.v, ch.w)); });
+      var best = -1e9, bp = 0;
+      ch.phases.forEach(function (ph, pi) { var sv = sim(V, ph.v, ch.w); if (sv > best) { best = sv; bp = pi; } });
+      phs.push(bp);
       return best + sigBonus(ch.id, sig[ch.id] || 0);
     });
-    plays.push({ base: base, flat: flat });
+    plays.push({ base: base, flat: flat, phs: phs, early: early });
   }
 
   var bias = C.map(function () { return 0; }), it, ITER = 300;
@@ -3111,20 +3172,26 @@ function quizCalibrate(D0, opts) {
   var kIdx = Math.max(0, Math.min(tops.length - 1, Math.round(unkTarget * N) - flatN));
   var T = tops.length ? tops[kIdx] : 0;
 
+  var ph1 = {}, ph1n = {}, ecp = D.earlyChance == null ? 0.3 : D.earlyChance, ecb = D.earlyChanceBy || {};
   var share = {}, unk = 0, tb = 0, gap = D.tbGap == null ? 8 : D.tbGap, pairs = {};
   (D.tiebreak || []).forEach(function (q) { if (q.pair && q.pair[0] && q.pair[1]) pairs[[q.pair[0], q.pair[1]].sort().join("|")] = 1; });
   C.forEach(function (c) { share[c.id] = 0; });
   plays.forEach(function (pl) {
     var sc = pl.base.map(function (b, i) { return { i: i, s: clamp(b + bias[i], 0, 100) }; }).sort(function (a, b) { return b.s - a.s; });
     if (pl.flat || sc[0].s < T) { unk++; return; }
-    share[C[sc[0].i].id]++;
+    var wid = C[sc[0].i].id, wph = pl.phs[sc[0].i];
+    if (wph !== 0 && pl.early[wid] && rnd() < (ecb[wid] != null ? +ecb[wid] : ecp)) wph = 0;
+    ph1n[wid] = (ph1n[wid] || 0) + 1; if (wph === 0) ph1[wid] = (ph1[wid] || 0) + 1;
+    share[wid]++;
     if (sc[0].s - sc[1].s <= gap && pairs[[C[sc[0].i].id, C[sc[1].i].id].sort().join("|")]) tb++;
   });
   var calBias = {};
   C.forEach(function (c, i) { calBias[c.id] = Math.round(bias[i] * 10) / 10; });
   var outShare = {};
   C.forEach(function (c) { outShare[c.id] = share[c.id] / N; });
-  return { calibration: { bias: calBias, T: Math.round(T * 10) / 10 }, stats: { N: N, share: outShare, unknown: unk / N, tiebreak: tb / N } };
+  var outPh1 = {};
+  C.forEach(function (c) { outPh1[c.id] = ph1n[c.id] ? (ph1[c.id] || 0) / ph1n[c.id] : 0; });
+  return { calibration: { bias: calBias, T: Math.round(T * 10) / 10 }, stats: { N: N, share: outShare, phase1: outPh1, unknown: unk / N, tiebreak: tb / N } };
 }
 if (typeof module !== "undefined" && module.exports) module.exports = quizCalibrate;
 
@@ -3143,7 +3210,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = quizCalibr
   function normalize(d) {
     d.axes = d.axes || AXK.map(function (k) { return { k: k, lo: "", hi: "" }; });
     d.setNames = d.setNames || { "1": "Phần 1", "2": "Phần 2" };
-    (d.questions = d.questions || []).forEach(function (q) { q.ans = q.ans || []; q.ans.forEach(function (a) { a.s = a.s || {}; a.g = a.g || {}; }); });
+    (d.questions = d.questions || []).forEach(function (q) { q.ans = q.ans || []; q.ans.forEach(function (a) { a.s = a.s || {}; a.g = a.g || {}; a.e = a.e || {}; }); });
     (d.tiebreak = d.tiebreak || []).forEach(function (q) { q.pair = q.pair || ["", ""]; q.ans = q.ans || []; q.ans.forEach(function (a) { a.s = {}; a.g = a.g || {}; }); });
     return d;
   }

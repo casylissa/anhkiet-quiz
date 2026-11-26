@@ -156,11 +156,12 @@ function vectors(D, answers) {
   var M = D._m || (D._m = measures(D));
   var sets = { all: null, 1: 1, 2: 2 };
   var num = { all: {}, 1: {}, 2: {} }, den = { all: {}, 1: {}, 2: {} };
-  var sig = {};
+  var sig = {}, early = {};
   AX.forEach(function (a) { ["all", 1, 2].forEach(function (s) { num[s][a] = 0; den[s][a] = 0; }); });
   D.questions.forEach(function (q, qi) {
     var r = pickDelta(q, answers[qi]);
     var k;
+    (answers[qi] || []).forEach(function (ai) { var an = q.ans[ai]; if (an && an.e) for (k in an.e) if (an.e[k]) early[k] = 1; });
     for (k in r.sig) sig[k] = (sig[k] || 0) + r.sig[k];
     AX.forEach(function (a) {
       if (!M[qi][a]) return;
@@ -176,7 +177,7 @@ function vectors(D, answers) {
     });
   }
   var all = build("all", null);
-  return { all: all, s1: build(1, all), s2: build(2, all), sig: sig };
+  return { all: all, s1: build(1, all), s2: build(2, all), sig: sig, early: early };
 }
 
 function sim(x, c, w) {
@@ -706,7 +707,14 @@ window.QUIZ_MAIN = function () {
     var rec = done || { counted: false };
     rec.tb = tbPicks || null; done = rec;
     var t0 = R.ranked[0];
-    var id = R.unknown ? "none" : t0.id, pi = R.unknown ? 0 : t0.pi, ph = R.unknown ? null : ch(id).phases[pi];
+    var id = R.unknown ? "none" : t0.id, pi = R.unknown ? 0 : t0.pi;
+    // Trị số "e": đã gặp ít nhất một lần và đang ra phase sau thì có xác suất đổi về phase ban đầu (tung một lần mỗi lượt làm, lưu lại)
+    if (!R.unknown && pi > 0 && R.V && R.V.early && R.V.early[id]) {
+      if (rec.er == null) rec.er = Math.random();
+      var ec = D.earlyChanceBy && D.earlyChanceBy[id] != null ? +D.earlyChanceBy[id] : (D.earlyChance == null ? 0.3 : +D.earlyChance);
+      if (rec.er < ec) pi = 0;
+    }
+    var ph = R.unknown ? null : ch(id).phases[pi];
     var html = '<p class="tag">Kết quả của bạn</p>';
     if (R.unknown) {
       html += '<p class="h1s">Bạn không giống ai</p><p>Bạn không khớp trọn vẹn với nhân vật nào trong 13 người. Bạn là một phiên bản riêng, không lẫn vào đâu được.</p>' +
