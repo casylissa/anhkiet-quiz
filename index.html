@@ -447,7 +447,7 @@ window.QUIZ_MAIN = function () {
     ov.className = "ov"; ov.id = "ov"; ov.setAttribute("role", "dialog"); ov.setAttribute("aria-modal", "true"); ov.setAttribute("aria-label", "Thẻ " + nameOf(id));
     ov.innerHTML = '<div class="pop" style="--h:' + hue(id) + (cc ? ';--cc:' + cc : '') + '">' +
       '<div class="tcard"><i class="co tl"></i><i class="co tr"></i><i class="co bl"></i><i class="co br"></i><div class="num">' + esc(numOf(id)) + '</div><div class="art">' + (img ? '<img src="' + esc(img) + '" alt="' + esc(nameOf(id)) + '">' : '<span class="init">' + ini(id) + '</span>') + '</div>' +
-      '<div class="plate"><div class="orn"><i></i></div><div class="nm">' + esc(nameOf(id)) + '</div>' + (ph && ph.label ? '<div class="ph">' + esc(ph.label) + '</div>' : '') + (bl ? '<div class="lb">' + esc(bl) + '</div>' : '') + '</div></div>' +
+      '<div class="plate"><div class="orn"><i></i></div><div class="nm">' + esc(nameOf(id)) + '</div>' +  (bl ? '<div class="lb">' + esc(bl) + '</div>' : '') + '</div></div>' +
       '<div class="say"><div class="stk">' + (stk ? '<img src="' + esc(stk) + '" alt="">' : ini(id)) + '</div><div class="bub">' + esc(say) + '</div></div>' +
       '<button class="primary" id="cl">Đóng</button><button class="alt" id="rs">Không giống! Lại đi</button></div>';
     var sImg = ov.querySelector(".stk img"), triedBase = false;
