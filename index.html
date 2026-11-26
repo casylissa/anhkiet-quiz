@@ -720,7 +720,7 @@ window.QUIZ_MAIN = function () {
     }
     if (R.daily.id !== R.pressure.id) html += '<p class="note">Ngày thường bạn giống <b>' + esc(R.daily.name) + '</b>, nhưng khi bị dồn vào chân tường lại giống <b>' + esc(R.pressure.name) + '</b>.</p>';
     html += '<p class="cnt" id="cnt" hidden></p><button class="primary" id="again2" style="margin-top:18px">Xem lại thẻ của bạn</button>' +
-      '<button class="ghost" id="others" style="margin-top:2px">Xem người khác ra gì</button>' +
+      '<button class="ghost" id="others" style="margin-top:2px">Xem người khác ra kết quả gì</button>' +
       '<div style="margin-top:22px"><button class="ghost" id="again">Làm lại</button></div>';
     app.innerHTML = html; drawStats(); top();
     document.getElementById("again2").onclick = function () { openCard(id, pi); };
