@@ -60,26 +60,24 @@ button.ghost{text-align:center;color:var(--sub)}
 .pop{width:100%;max-width:330px;margin:auto;animation:rise .45s cubic-bezier(.2,.9,.3,1.2)}
 @keyframes fade{from{opacity:0}}
 @keyframes rise{from{opacity:0;transform:translateY(24px) scale(.92) rotate(-2deg)}}
-.tcard{--h:250;--gold:#ecd9a0;--gold2:#b99a52;--cc2:var(--cc,hsl(var(--h) 55% 60%));position:relative;aspect-ratio:2/3;border-radius:18px;padding:18px 18px 14px;display:flex;flex-direction:column;gap:7px;color:#fff;background:radial-gradient(circle at 50% 0%,color-mix(in srgb,var(--cc2) 55%,#fff),transparent 58%),linear-gradient(170deg,color-mix(in srgb,var(--cc2) 62%,#241a3d),color-mix(in srgb,var(--cc2) 38%,#0e0a1c));box-shadow:0 18px 40px rgba(20,16,50,.45),inset 0 0 0 1px rgba(255,255,255,.15)}
-.tcard:before{content:"";position:absolute;inset:6px;border:1.5px solid var(--gold);border-radius:13px;pointer-events:none}
-.tcard:after{content:"";position:absolute;inset:10px;border:1px solid color-mix(in srgb,var(--gold) 50%,transparent);border-radius:9px;pointer-events:none}
-.tcard .co{position:absolute;width:24px;height:24px;pointer-events:none;z-index:2;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 21V9Q3 3 9 3H21' fill='none' stroke='%23ecd9a0' stroke-width='1.6'/%3E%3Ccircle cx='9' cy='9' r='2' fill='%23ecd9a0'/%3E%3Cpath d='M13 3l1.6 1.6L13 6.2l-1.6-1.6zM3 13l1.6 1.6L3 16.2l-1.6-1.6z' fill='%23ecd9a0'/%3E%3C/svg%3E") no-repeat center/contain}
-.tcard .tl{top:3px;left:3px}.tcard .tr{top:3px;right:3px;transform:scaleX(-1)}.tcard .bl{bottom:3px;left:3px;transform:scaleY(-1)}.tcard .br{bottom:3px;right:3px;transform:scale(-1,-1)}
-.tcard .num{display:flex;align-items:center;justify-content:center;gap:9px;font-family:"Cormorant Garamond",Georgia,serif;font-weight:700;font-size:16px;line-height:1;letter-spacing:.3em;text-indent:.3em;color:var(--gold)}
-.tcard .num:before,.tcard .num:after{content:"";height:1px;width:26px;background:linear-gradient(90deg,transparent,var(--gold))}
+.tcard{--h:250;--bg1:#3b3560;--bg2:#2a2547;--fg:#f4f1ff;--fg2:#d9d4f0;--art:#f7f5fb;position:relative;aspect-ratio:2/3;border-radius:18px;padding:24px 22px 18px;display:flex;flex-direction:column;gap:8px;color:var(--fg);background:linear-gradient(170deg,var(--bg1),var(--bg2));box-shadow:0 14px 32px rgba(20,16,50,.35)}
+.tcard:before{content:"";position:absolute;inset:6px;border:1.5px solid var(--fg);border-radius:12px;pointer-events:none}
+.tcard:after{content:"";position:absolute;inset:11px;--r:18px;pointer-events:none;border:1px solid var(--fg);background:radial-gradient(circle at 0 0,transparent calc(var(--r) - .5px),var(--fg) calc(var(--r) - .5px),var(--fg) calc(var(--r) + .5px),transparent calc(var(--r) + .5px)) 0 0/calc(var(--r) + 3px) calc(var(--r) + 3px) no-repeat,radial-gradient(circle at 100% 0,transparent calc(var(--r) - .5px),var(--fg) calc(var(--r) - .5px),var(--fg) calc(var(--r) + .5px),transparent calc(var(--r) + .5px)) 100% 0/calc(var(--r) + 3px) calc(var(--r) + 3px) no-repeat,radial-gradient(circle at 0 100%,transparent calc(var(--r) - .5px),var(--fg) calc(var(--r) - .5px),var(--fg) calc(var(--r) + .5px),transparent calc(var(--r) + .5px)) 0 100%/calc(var(--r) + 3px) calc(var(--r) + 3px) no-repeat,radial-gradient(circle at 100% 100%,transparent calc(var(--r) - .5px),var(--fg) calc(var(--r) - .5px),var(--fg) calc(var(--r) + .5px),transparent calc(var(--r) + .5px)) 100% 100%/calc(var(--r) + 3px) calc(var(--r) + 3px) no-repeat;background-origin:border-box;-webkit-mask:radial-gradient(circle at 0 0,transparent calc(var(--r) - .5px),#000 calc(var(--r) - .5px)) 0 0/50.5% 50.5% no-repeat,radial-gradient(circle at 100% 0,transparent calc(var(--r) - .5px),#000 calc(var(--r) - .5px)) 100% 0/50.5% 50.5% no-repeat,radial-gradient(circle at 0 100%,transparent calc(var(--r) - .5px),#000 calc(var(--r) - .5px)) 0 100%/50.5% 50.5% no-repeat,radial-gradient(circle at 100% 100%,transparent calc(var(--r) - .5px),#000 calc(var(--r) - .5px)) 100% 100%/50.5% 50.5% no-repeat;mask:radial-gradient(circle at 0 0,transparent calc(var(--r) - .5px),#000 calc(var(--r) - .5px)) 0 0/50.5% 50.5% no-repeat,radial-gradient(circle at 100% 0,transparent calc(var(--r) - .5px),#000 calc(var(--r) - .5px)) 100% 0/50.5% 50.5% no-repeat,radial-gradient(circle at 0 100%,transparent calc(var(--r) - .5px),#000 calc(var(--r) - .5px)) 0 100%/50.5% 50.5% no-repeat,radial-gradient(circle at 100% 100%,transparent calc(var(--r) - .5px),#000 calc(var(--r) - .5px)) 100% 100%/50.5% 50.5% no-repeat}
+.tcard .num{font-variant-numeric:lining-nums;display:flex;align-items:center;justify-content:center;gap:9px;font-family:"Cormorant Garamond",Georgia,serif;font-weight:700;font-size:16px;line-height:1;letter-spacing:.3em;text-indent:.3em;color:var(--fg)}
+.tcard .num.zero{font-family:"Be Vietnam Pro",system-ui,sans-serif;font-weight:600;font-size:15px}
+.tcard .num:before,.tcard .num:after{content:"";height:1px;width:26px;background:linear-gradient(90deg,transparent,var(--fg))}
 .tcard .num:after{transform:scaleX(-1)}
-.tcard .art{position:relative;flex:1;min-height:0;border:1.5px solid var(--gold);border-radius:50% 50% 10px 10px/34% 34% 10px 10px;background:radial-gradient(circle at 50% 35%,#fffdf6,color-mix(in srgb,var(--cc2) 32%,#fff6df));display:grid;place-items:center;overflow:hidden;box-shadow:0 0 0 3px color-mix(in srgb,var(--cc2) 45%,#0e0a1c),0 0 0 4px color-mix(in srgb,var(--gold) 60%,transparent)}
-.tcard .art:after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 17% 24%,var(--gold2) 0 1.8px,transparent 2.8px),radial-gradient(circle at 83% 30%,var(--gold2) 0 1.4px,transparent 2.4px),radial-gradient(circle at 72% 13%,var(--gold2) 0 1px,transparent 2px),radial-gradient(circle at 26% 12%,var(--gold2) 0 1px,transparent 2px),radial-gradient(circle at 9% 46%,var(--gold2) 0 1px,transparent 2px),radial-gradient(circle at 91% 55%,var(--gold2) 0 1.3px,transparent 2.3px);opacity:.85}
+.tcard .art{position:relative;flex:1;min-height:0;border:1px solid var(--fg);border-radius:6px;background:var(--art);display:grid;place-items:center;overflow:hidden}
+.tcard .art:after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 17% 24%,var(--bg1) 0 1.8px,transparent 2.8px),radial-gradient(circle at 83% 30%,var(--bg1) 0 1.4px,transparent 2.4px),radial-gradient(circle at 72% 13%,var(--bg1) 0 1px,transparent 2px),radial-gradient(circle at 26% 12%,var(--bg1) 0 1px,transparent 2px),radial-gradient(circle at 9% 46%,var(--bg1) 0 1px,transparent 2px),radial-gradient(circle at 91% 55%,var(--bg1) 0 1.3px,transparent 2.3px);opacity:.55}
 .tcard .art img{width:100%;height:100%;object-fit:cover}
-.tcard .init{font-family:"Cormorant Garamond",Georgia,serif;font-size:120px;font-weight:700;color:color-mix(in srgb,var(--cc2) 60%,#000);opacity:.3;line-height:1}
+.tcard .init{font-family:"Cormorant Garamond",Georgia,serif;font-size:120px;font-weight:700;color:var(--bg1);opacity:.3;line-height:1}
 .tcard .plate{position:relative;text-align:center;padding:2px 8px 4px}
 .tcard .orn{display:flex;align-items:center;justify-content:center;gap:8px;margin:2px 0 5px}
-.tcard .orn:before,.tcard .orn:after{content:"";height:1px;width:34%;background:linear-gradient(90deg,transparent,var(--gold))}
+.tcard .orn:before,.tcard .orn:after{content:"";height:1px;width:34%;background:linear-gradient(90deg,transparent,var(--fg))}
 .tcard .orn:after{transform:scaleX(-1)}
-.tcard .orn i{width:7px;height:7px;transform:rotate(45deg);background:var(--gold)}
-.tcard .nm{font-family:"Cormorant Garamond","Be Vietnam Pro",Georgia,serif;font-size:25px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;line-height:1.1;color:#fff8e1;text-shadow:0 1px 3px rgba(0,0,0,.45)}
-.tcard .ph{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);margin-top:3px}
-.tcard .lb{font-size:12.5px;line-height:1.45;color:#f1e8cf;opacity:.92;margin-top:5px}
+.tcard .orn i{width:7px;height:7px;transform:rotate(45deg);background:var(--fg)}
+.tcard .nm{white-space:nowrap;font-family:"Cormorant Garamond","Be Vietnam Pro",Georgia,serif;font-size:25px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;line-height:1.1;color:var(--fg)}
+.tcard .lb{font-size:12.5px;line-height:1.45;color:var(--fg2);margin-top:5px}
 .cnt{margin:14px 0 0;font-size:15px}
 .cnt b{color:var(--acc)}
 .say{display:flex;align-items:flex-start;gap:10px;margin:14px 2px 0}
@@ -352,6 +350,33 @@ window.QUIZ_MAIN = function () {
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
   function ch(id) { return D.characters.filter(function (c) { return c.id === id; })[0]; }
   function nameOf(id) { return id === "none" ? "Không giống ai" : ch(id).name; }
+  // Tên dài (ví dụ "Không giống ai") thì chữ nhỏ lại để không bị xuống dòng
+  function nmStyle(name) { var n = String(name).length, fs = n <= 8 ? 25 : n <= 11 ? 22 : n <= 14 ? 19 : 16; return "font-size:" + fs + "px" + (n > 11 ? ";letter-spacing:.08em" : ""); }
+  // ===== Màu thẻ tự thích nghi: nền theo màu nhân vật, chữ chỉnh sáng/tối cho đủ độ tương phản =====
+  function hsl2rgb(h, s, l) { s /= 100; l /= 100; var a = s * Math.min(l, 1 - l); function f(n) { var k = (n + h / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1))); } return [f(0), f(8), f(4)]; }
+  function rgb2hsl(r, g, b) {
+    var mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, l = (mx + mn) / 2, h = 0, s = d ? d / (1 - Math.abs(2 * l - 1)) : 0;
+    if (d) { if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4; h *= 60; if (h < 0) h += 360; }
+    return [h, s * 100, l * 100];
+  }
+  function lumi(c) { var v = c.map(function (x) { return x <= .03928 ? x / 12.92 : Math.pow((x + .055) / 1.055, 2.4); }); return .2126 * v[0] + .7152 * v[1] + .0722 * v[2]; }
+  function ratio(a, b) { var x = lumi(a), y = lumi(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); }
+  function hs(a) { return "hsl(" + Math.round(a[0]) + " " + Math.round(a[1]) + "% " + Math.round(a[2]) + "%)"; }
+  function cardTheme(hex, h0) {
+    var h, s, l;
+    if (/^#[0-9a-f]{6}$/i.test(hex || "")) { var t = rgb2hsl(parseInt(hex.substr(1, 2), 16) / 255, parseInt(hex.substr(3, 2), 16) / 255, parseInt(hex.substr(5, 2), 16) / 255); h = t[0]; s = t[1]; l = t[2]; }
+    else { h = h0 == null ? 250 : h0; s = 40; l = 45; }
+    s = Math.min(s, 65);
+    var dark = l < 58, l1 = dark ? Math.max(22, Math.min(42, l - 12)) : Math.min(90, Math.max(80, l + 14)), tsat = Math.min(s, 50);
+    var fg = [h, tsat, dark ? 96 : 12], fg2 = [h, Math.min(s, 40), dark ? 86 : 22], bg1, bg2, i;
+    for (i = 0; i < 80; i++) {
+      bg1 = [h, s, l1]; bg2 = [h, s, dark ? Math.max(8, l1 - 8) : Math.max(0, l1 - 6)];
+      var w = ratio(hsl2rgb(fg[0], fg[1], fg[2]), hsl2rgb(bg2[0], bg2[1], bg2[2])), w1 = ratio(hsl2rgb(fg[0], fg[1], fg[2]), hsl2rgb(bg1[0], bg1[1], bg1[2])), v = ratio(hsl2rgb(fg2[0], fg2[1], fg2[2]), hsl2rgb(bg2[0], bg2[1], bg2[2])), v1 = ratio(hsl2rgb(fg2[0], fg2[1], fg2[2]), hsl2rgb(bg1[0], bg1[1], bg1[2]));
+      if (Math.min(w, w1) >= 7 && Math.min(v, v1) >= 4.5) break;
+      l1 += dark ? -2 : 1; l1 = Math.max(6, Math.min(97, l1));
+    }
+    return "--bg1:" + hs(bg1) + ";--bg2:" + hs(bg2) + ";--fg:" + hs(fg) + ";--fg2:" + hs(fg2) + ";--art:hsl(" + Math.round(h) + " 35% " + (dark ? 95 : 97) + "%)";
+  }
   function roman(n) { var r = [[10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]], t = ""; r.forEach(function (p) { while (n >= p[0]) { t += p[1]; n -= p[0]; } }); return t; }
   // Số La Mã trên đầu thẻ: lấy theo thứ tự nhân vật trong data. Muốn đổi thì thêm "num": "VII" cho nhân vật trong content.json
   function numOf(id) {
@@ -446,8 +471,8 @@ window.QUIZ_MAIN = function () {
     var ov = document.createElement("div");
     ov.className = "ov"; ov.id = "ov"; ov.setAttribute("role", "dialog"); ov.setAttribute("aria-modal", "true"); ov.setAttribute("aria-label", "Thẻ " + nameOf(id));
     ov.innerHTML = '<div class="pop" style="--h:' + hue(id) + (cc ? ';--cc:' + cc : '') + '">' +
-      '<div class="tcard"><i class="co tl"></i><i class="co tr"></i><i class="co bl"></i><i class="co br"></i><div class="num">' + esc(numOf(id)) + '</div><div class="art">' + (img ? '<img src="' + esc(img) + '" alt="' + esc(nameOf(id)) + '">' : '<span class="init">' + ini(id) + '</span>') + '</div>' +
-      '<div class="plate"><div class="orn"><i></i></div><div class="nm">' + esc(nameOf(id)) + '</div>' +  (bl ? '<div class="lb">' + esc(bl) + '</div>' : '') + '</div></div>' +
+      '<div class="tcard" style="' + cardTheme(cc, hue(id)) + '"><div class="num' + (numOf(id) === "0" ? " zero" : "") + '">' + esc(numOf(id)) + '</div><div class="art">' + (img ? '<img src="' + esc(img) + '" alt="' + esc(nameOf(id)) + '">' : '<span class="init">' + ini(id) + '</span>') + '</div>' +
+      '<div class="plate"><div class="orn"><i></i></div><div class="nm" style="' + nmStyle(nameOf(id)) + '">' + esc(nameOf(id)) + '</div>' +  (bl ? '<div class="lb">' + esc(bl) + '</div>' : '') + '</div></div>' +
       '<div class="say"><div class="stk">' + (stk ? '<img src="' + esc(stk) + '" alt="">' : ini(id)) + '</div><div class="bub">' + esc(say) + '</div></div>' +
       '<button class="primary" id="cl">Đóng</button><button class="alt" id="rs">Không giống! Lại đi</button></div>';
     var sImg = ov.querySelector(".stk img"), triedBase = false;
