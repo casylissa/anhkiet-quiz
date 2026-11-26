@@ -1,0 +1,3469 @@
+<!DOCTYPE html>
+<html lang="vi"><head>
+    <script>
+      (function() {
+        // Capture host references before any artifact code runs: Window.parent
+        // is [Replaceable] (a top-level `var parent` in artifact code would
+        // replace the accessor with a data property), and a top-level
+        // `const crypto` would shadow the global — either would otherwise
+        // silently break the bridge for artifacts that worked before.
+        const realParent = window.parent;
+        const downloadTarget = '/';
+        const cryptoObj = window.crypto;
+        const RealURL = URL;
+        const realDecodeURIComponent = decodeURIComponent;
+        const RealTextEncoder = TextEncoder;
+        const realAtob = atob;
+        const realHistory = window.history;
+        const RealHashChangeEvent = window.HashChangeEvent;
+        const realDispatchEvent = window.dispatchEvent.bind(window);
+        // html-to-image is only used by takeScreenshot: fetched on first use, not as a
+        // parser-blocking tag. Native fetch, captured before the proxy override below.
+        const realFetch = typeof window.fetch === 'function' ? window.fetch.bind(window) : null;
+        const HTML_TO_IMAGE_SRC = "https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.13/html-to-image.min.js";
+        const HTML_TO_IMAGE_INTEGRITY = "sha512-iZ2ORl595Wx6miw+GuadDet4WQbdSWS3JLMoNfY8cRGoEFy6oT3G9IbcrBeL6AfkgpA51ETt/faX6yLV+/gFJg==";
+        let htmlToImageLoad = null;
+        const loadHtmlToImage = () => {
+          if (!htmlToImageLoad) {
+            htmlToImageLoad = (realFetch
+              ? realFetch(HTML_TO_IMAGE_SRC, { integrity: HTML_TO_IMAGE_INTEGRITY, credentials: 'omit', referrerPolicy: 'no-referrer' })
+              : Promise.reject(new Error('fetch unavailable'))
+            )
+              .then((res) => {
+                if (!res.ok) throw new Error('html-to-image failed to load (' + res.status + ')');
+                return res.text();
+              })
+              .then((source) => {
+                // UMD bundle: hide the artifact's AMD/CommonJS globals so it takes the
+                // window-global branch; inline script text runs synchronously on insert.
+                const hidden = ['define', 'module', 'exports'].map((k) => {
+                  const entry = { k, own: Object.prototype.hasOwnProperty.call(window, k), v: window[k] };
+                  try { window[k] = undefined; } catch (e) {}
+                  return entry;
+                });
+                try {
+                  const el = document.createElement('script');
+                  el.text = source;
+                  (document.head || document.documentElement).appendChild(el);
+                } finally {
+                  hidden.forEach(({ k, own, v }) => {
+                    try { if (own) { window[k] = v; } else { delete window[k]; } } catch (e) {}
+                  });
+                }
+                if (!window.htmlToImage) throw new Error('html-to-image unavailable after load');
+                return window.htmlToImage;
+              });
+            // A failed load may be transient; let the next screenshot retry.
+            htmlToImageLoad.catch(() => { htmlToImageLoad = null; });
+          }
+          return htmlToImageLoad;
+        };
+        // crypto.randomUUID exists only in Secure Contexts; fall back to a
+        // unique non-crypto id elsewhere (http://LAN-IP dev flows) —
+        // uniqueness is what the bridge needs, unpredictability is
+        // defense-in-depth on top of the source guards.
+        const newRequestId =
+          cryptoObj && typeof cryptoObj.randomUUID === "function"
+            ? function () { return cryptoObj.randomUUID(); }
+            : function () { return Date.now() + "-" + Math.random(); };
+
+        // Bridge request ids are crypto-random (not sequential) so they
+        // cannot be predicted by other frames in the tab.
+        let callbacksMap = new Map();
+        let streamControllers = new Map();
+        
+        window.claude = {
+          complete: (prompt) => {
+            return new Promise((resolve, reject) => {
+              const id = newRequestId();
+              callbacksMap.set(id, { resolve, reject });
+              realParent.postMessage({ type: 'claudeComplete', id, prompt }, '*');
+            });
+          }
+        };
+
+        // storage.get and .list calls not yet answered, read by the parent at this frame's 'load' (an answer may restyle the page); counted
+        // here, not there, because WebKit can run this frame's 'load' in the parent before a message posted while parsing has arrived.
+        let storageReadsOut = 0;
+        try { Object.defineProperty(window, '__storageReadsOut', { configurable: true, get: () => storageReadsOut }); } catch (e) {}
+        window.storage = {
+          get: (key, shared = false) => {
+            return new Promise((resolve, reject) => {
+              const id = newRequestId();
+              callbacksMap.set(id, { resolve, reject });
+              realParent.postMessage({ type: 'storageGet', id, key, shared }, '*');
+              storageReadsOut += 1;
+            });
+          },
+          set: (key, value, shared = false) => {
+            return new Promise((resolve, reject) => {
+              const id = newRequestId();
+              callbacksMap.set(id, { resolve, reject });
+              realParent.postMessage({ type: 'storageSet', id, key, value, shared }, '*');
+            });
+          },
+          delete: (key, shared = false) => {
+            return new Promise((resolve, reject) => {
+              const id = newRequestId();
+              callbacksMap.set(id, { resolve, reject });
+              realParent.postMessage({ type: 'storageDelete', id, key, shared }, '*');
+            });
+          },
+          list: (prefix, shared = false) => {
+            return new Promise((resolve, reject) => {
+              const id = newRequestId();
+              callbacksMap.set(id, { resolve, reject });
+              realParent.postMessage({ type: 'storageList', id, prefix, shared }, '*');
+              storageReadsOut += 1;
+            });
+          }
+        };
+
+        let pendingBlobs = new Map();
+        URL.createObjectURL = (blob) => {
+          // Store the blob and create an ID and URL for it
+          const blobId = `blob-${Date.now()}-${Math.random()}`;
+          pendingBlobs.set(blobId, blob);
+          return `blob-request://${blobId}`;
+        };
+
+        URL.revokeObjectURL = (url) => {
+          // Remove the blob from our store
+          const blobId = url.replace("blob-request://", "");
+          pendingBlobs.delete(blobId);
+        };
+
+        const getBlobFromURL = (url) => {
+          const blobId = url.replace("blob-request://", "");
+          return pendingBlobs.get(blobId);
+        };
+
+        // Override global fetch with streaming support
+        window.fetch = (url, init = {}) => {
+          return new Promise((resolve, reject) => {
+            const id = newRequestId();
+            const channelId = `fetch-${id}-${Date.now()}`;
+            
+            callbacksMap.set(id, { 
+              resolve: (response) => {
+                // Null-body statuses: Response(stream, {status: 204}) throws
+                // per the Fetch spec, which would escape this resolver and
+                // hang the artifact's await forever.
+                if (response.status === 204 || response.status === 205 || response.status === 304) {
+                  try {
+                    resolve(new Response(null, {
+                      status: response.status,
+                      statusText: response.statusText,
+                      headers: response.headers
+                    }));
+                  } catch (err) {
+                    // Invalid statusText/header bytes can throw here too.
+                    reject(new TypeError(
+                      'Bridge fetch: unconstructable response (status ' + response.status + ')'
+                    ));
+                  }
+                  return;
+                }
+                // Create a ReadableStream for the response body
+                const stream = new ReadableStream({
+                  start(controller) {
+                    streamControllers.set(channelId, controller);
+                  },
+                  cancel() {
+                    streamControllers.delete(channelId);
+                  }
+                });
+                
+                // Create and return the Response with the stream. Response()
+                // requires status in [200, 599]; an opaque/no-cors fetch
+                // forwards status 0, which would throw here and escape the
+                // resolver, hanging the artifact's await. Surface it as a
+                // network-error-shaped rejection instead.
+                try {
+                  resolve(new Response(stream, {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: response.headers
+                  }));
+                } catch (err) {
+                  streamControllers.delete(channelId);
+                  reject(new TypeError(
+                    'Bridge fetch: unconstructable response (status ' + response.status + ')'
+                  ));
+                }
+              },
+              reject,
+              channelId
+            });
+            
+            realParent.postMessage({
+              type: 'proxyFetch',
+              id,
+              url,
+              init,
+              channelId
+            }, '*');
+          });
+        };
+
+        window.addEventListener('message', async (event) => {
+          // Only the embedding parent may drive the bridge — sibling and
+          // nested frames can also postMessage into this window.
+          if (event.source !== realParent) return;
+          if (event.data.type === 'takeScreenshot') {
+            // Echo the request's nonce so the requester can correlate the
+            // reply to ITS request — a reply without the expected nonce
+            // (e.g. from a stale pre-remount artifact) is ignored upstream.
+            const screenshotNonce = event.data.nonce;
+            const rootElement = document.getElementById('artifacts-component-root-html');
+            if (!rootElement) {
+              realParent.postMessage({
+                type: 'screenshotError',
+                nonce: screenshotNonce,
+                error: new Error('Root element not found'),
+              }, '*');
+              return;
+            }
+            // Catch CDN load failures and toPng errors so the parent always
+            // gets a response instead of hanging forever.
+            try {
+              const htmlToImage = await loadHtmlToImage();
+              // Draws only the top, 630/1200 of the width tall, as the link preview is 1200x630. `height` also shortens html-to-image's copy of the root and
+              // what its % min- and max-height resolve against, which moves centred content; `style` undoes that. Keep in step with app/page.tsx.
+              const previewHeight = Math.ceil((rootElement.offsetWidth * 630) / 1200);
+              const screenshot = await htmlToImage.toPng(rootElement, {
+                ...(rootElement.offsetHeight > previewHeight && {
+                  height: previewHeight,
+                  style: { height: window.getComputedStyle(rootElement).height, minHeight: '0', maxHeight: 'none' },
+                }),
+                imagePlaceholder:
+                  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAA1JREFUGFdjePDgwX8ACOQDoNsk0PMAAAAASUVORK5CYII=",
+              });
+              realParent.postMessage({
+                type: 'screenshotData',
+                nonce: screenshotNonce,
+                data: screenshot,
+              }, '*');
+            } catch (err) {
+              realParent.postMessage({
+                type: 'screenshotError',
+                nonce: screenshotNonce,
+                error: err instanceof Error ? err : new Error(String(err)),
+              }, '*');
+            }
+          } else if (event.data.type === 'claudeComplete') {
+            const callback = callbacksMap.get(event.data.id);
+            if (!callback) return;
+            if (event.data.error) {
+              callback.reject(new Error(event.data.error));
+            } else {
+              callback.resolve(event.data.completion);
+            }
+            callbacksMap.delete(event.data.id);
+          } else if (event.data.type === 'proxyFetchResponse') {
+            const callback = callbacksMap.get(event.data.id);
+            if (!callback) return;
+            if (event.data.error) {
+              callback.reject(new Error(event.data.error));
+              callbacksMap.delete(event.data.id);
+            } else {
+              // Initial response with headers, status, etc.
+              callback.resolve({
+                status: event.data.status,
+                statusText: event.data.statusText,
+                headers: event.data.headers
+              });
+              // Don't delete the callback yet if streaming
+              if (!event.data.body) {
+                callbacksMap.delete(event.data.id);
+              }
+            }
+          } else if (event.data.type === 'proxyFetchStream') {
+            // Handle streaming data chunks
+            const controller = streamControllers.get(event.data.channelId);
+            if (controller) {
+              if (event.data.error) {
+                controller.error(new Error(event.data.error));
+                streamControllers.delete(event.data.channelId);
+              } else if (event.data.done) {
+                controller.close();
+                streamControllers.delete(event.data.channelId);
+                // Clean up the callback
+                const callback = Array.from(callbacksMap.entries()).find(
+                  ([_, value]) => value.channelId === event.data.channelId
+                );
+                if (callback) {
+                  callbacksMap.delete(callback[0]);
+                }
+              } else if (event.data.chunk) {
+                controller.enqueue(new Uint8Array(event.data.chunk));
+              }
+            }
+          } else if (event.data.type === 'storageGet') {
+            const callback = callbacksMap.get(event.data.id);
+            if (!callback) return;
+            storageReadsOut -= 1;
+            if (event.data.error) {
+              callback.reject(new Error(event.data.error));
+            } else {
+              callback.resolve(event.data.result);
+            }
+            callbacksMap.delete(event.data.id);
+          } else if (event.data.type === 'storageSet') {
+            const callback = callbacksMap.get(event.data.id);
+            if (!callback) return;
+            if (event.data.error) {
+              callback.reject(new Error(event.data.error));
+            } else {
+              callback.resolve(event.data.result);
+            }
+            callbacksMap.delete(event.data.id);
+          } else if (event.data.type === 'storageDelete') {
+            const callback = callbacksMap.get(event.data.id);
+            if (!callback) return;
+            if (event.data.error) {
+              callback.reject(new Error(event.data.error));
+            } else {
+              callback.resolve(event.data.result);
+            }
+            callbacksMap.delete(event.data.id);
+          } else if (event.data.type === 'storageList') {
+            const callback = callbacksMap.get(event.data.id);
+            if (!callback) return;
+            storageReadsOut -= 1;
+            if (event.data.error) {
+              callback.reject(new Error(event.data.error));
+            } else {
+              callback.resolve(event.data.result);
+            }
+            callbacksMap.delete(event.data.id);
+          }
+        });
+
+        // An SVG <a> exposes href as an SVGAnimatedString; its baseVal is the attribute
+        // as written, so resolve it against the base URL as the browser does for an HTML <a>.
+        const resolvedHref = (linkEl) => {
+          if (typeof linkEl.href === "string") return linkEl.href;
+          const written = linkEl.href?.baseVal;
+          // A same-document SVG link, such as one that begins an animation, stays with the browser.
+          if (!written || written.trim().startsWith("#")) return "";
+          try {
+            return new RealURL(written, linkEl.baseURI).href;
+          } catch (error) {
+            return written;
+          }
+        };
+
+        // This frame's URL is about:srcdoc, so the browser resolves "#id" against the renderer
+        // page and would load that page in the frame instead of scrolling.
+        const sameDocumentFragment = (linkEl) => {
+          const written = linkEl.getAttribute("href")?.trim();
+          if (!written?.startsWith("#") || document.querySelector("base[href]")) return null;
+          return written.slice(1);
+        };
+
+        // Same as focusFragmentTarget in app/page.tsx; change both together.
+        const focusFragmentTarget = (target, focusVisible) => {
+          if (!document.hasFocus() || target === document.body) return;
+          target.focus({ preventScroll: true, focusVisible });
+          if (document.activeElement === target || target.hasAttribute("tabindex")) return;
+          const takeBack = () => {
+            if (document.activeElement === target) return;
+            target.removeAttribute("tabindex");
+            target.removeEventListener("blur", takeBack);
+          };
+          target.setAttribute("tabindex", "-1");
+          target.addEventListener("blur", takeBack);
+          target.focus({ preventScroll: true, focusVisible });
+          takeBack();
+        };
+
+        // Not location.replace: a navigation also scrolls and moves focus. replaceState fires no hashchange, so the page is told here.
+        const moveAddress = (fragment) => {
+          const oldURL = window.location.href;
+          const newURL = new RealURL("#" + fragment, oldURL).href;
+          if (newURL === oldURL) return;
+          try {
+            realHistory.replaceState(realHistory.state, "", newURL);
+          } catch (error) {
+            // Safari and Firefox throw when it is called too often.
+            return;
+          }
+          setTimeout(() => realDispatchEvent(new RealHashChangeEvent("hashchange", { oldURL, newURL })));
+        };
+
+        const scrollToFragment = (fragment, linkEl) => {
+          let decoded = fragment;
+          try {
+            decoded = realDecodeURIComponent(fragment);
+          } catch (error) {}
+          let target = document.getElementById(fragment) ?? document.getElementById(decoded);
+          for (const named of target ? [] : document.getElementsByName(decoded)) {
+            if (named.localName === "a") {
+              target = named;
+              break;
+            }
+          }
+          if (target) {
+            target.scrollIntoView();
+            focusFragmentTarget(target, linkEl.matches(":focus-visible"));
+          } else if (decoded.toLowerCase() === "top") {
+            window.scrollTo(0, 0);
+          } else {
+            return false;
+          }
+          return true;
+        };
+
+        // Same decoder as dataUrlFile in app/page.tsx; change both together.
+        const hexPair = /^[0-9a-f]{2}$/i;
+        const dataUrlFile = (href) => {
+          const hash = href.indexOf("#");
+          const url = hash === -1 ? href : href.slice(0, hash);
+          const comma = url.indexOf(",");
+          if (comma === -1) return null;
+          const header = url.slice(0, comma);
+          const payload = url.slice(comma + 1);
+          const mimeMatch = header.match(/data:([^;]+)/);
+          const mimeType = mimeMatch ? mimeMatch[1] : "application/octet-stream";
+          const declaredBase64 = header
+            .split(";")
+            .slice(1)
+            .some((param) => param.trim().toLowerCase() === "base64");
+          const type = mimeMatch ? mimeMatch[1].trim().toLowerCase() : "";
+          const binaryType = type !== "" && !type.startsWith("text/");
+          if (declaredBase64 || (binaryType && !payload.includes("%"))) {
+            let binary = null;
+            try {
+              binary = realAtob(
+                payload.replace(/%([0-9a-f]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16))),
+              );
+            } catch (error) {
+              if (declaredBase64) return null;
+            }
+            if (binary !== null) {
+              const bytes = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+              }
+              return { mimeType, data: bytes.buffer };
+            }
+          }
+          const input = new RealTextEncoder().encode(payload);
+          const bytes = new Uint8Array(input.length);
+          let length = 0;
+          for (let i = 0; i < input.length; i++) {
+            if (input[i] === 0x25 && i + 2 < input.length) {
+              const pair = String.fromCharCode(input[i + 1], input[i + 2]);
+              if (hexPair.test(pair)) {
+                bytes[length++] = parseInt(pair, 16);
+                i += 2;
+                continue;
+              }
+            }
+            bytes[length++] = input[i];
+          }
+          return { mimeType, data: bytes.slice(0, length).buffer };
+        };
+
+        const onLinkClick = (event) => {
+          // Not instanceof Element: an artifact's own top-level class Element shadows the global.
+          if (typeof event.target?.closest !== "function") return;
+    
+          const linkEl = event.target.closest("a, area[href]");
+          const href = linkEl && resolvedHref(linkEl);
+          if (!href) return;
+
+          const fragment = sameDocumentFragment(linkEl);
+          if (fragment !== null) {
+            const handledByArtifact = event.defaultPrevented;
+            event.preventDefault();
+            if (handledByArtifact || fragment === "") return;
+            // Not for a script's click while the person is in the chat: the page may take the keyboard when its address changes.
+            if (false && (event.isTrusted || document.hasFocus())) moveAddress(fragment);
+            if (scrollToFragment(fragment, linkEl)) return;
+            // A fragment that names nothing in the artifact may name something in the host,
+            // such as a project thread. The artifact's own listeners still see the click.
+            realParent.postMessage({ type: 'openExternal', href }, '*');
+            return;
+          }
+          const filename = linkEl.getAttribute("download") ?? "";
+    
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          followLink(href, filename);
+        };
+
+        const followLink = (href, filename) => {
+          if (href.startsWith("blob-request:")) {
+            const blob = getBlobFromURL(href);
+            if (!blob) return;
+            void blob.arrayBuffer().then((data) => {
+              realParent.postMessage({
+                type: "downloadFile",
+                filename,
+                data,
+                mimeType: blob.type || "application/octet-stream",
+              }, downloadTarget);
+            });
+          } else if (href.startsWith("data:")) {
+            const file = dataUrlFile(href);
+            if (!file) return;
+            realParent.postMessage({
+              type: "downloadFile",
+              filename,
+              data: file.data,
+              mimeType: file.mimeType,
+            }, downloadTarget);
+          } else {
+            let linkUrl;
+            try {
+              linkUrl = new URL(href);
+            } catch (error) {
+              return;
+            }
+    
+            if (linkUrl.hostname === window.location.hostname) return;
+      
+            realParent.postMessage({
+              type: 'openExternal',
+              href,
+            }, '*');
+          }
+        };
+        window.addEventListener('click', onLinkClick);
+
+        // HACK: a click on an <a download> that is not in the document, or a dispatched click that does not bubble, never reaches the window
+        // listener, so the link gets a listener of its own while its click() or dispatchEvent() runs, after the artifact's. Change with app/page.tsx.
+        const RealAnchor = window.HTMLAnchorElement;
+        const RealMouseEvent = window.MouseEvent;
+        const anchorProto = RealAnchor?.prototype;
+        const superProto = anchorProto && Object.getPrototypeOf(anchorProto);
+        if (typeof RealAnchor === 'function' && typeof RealMouseEvent === 'function' && typeof superProto?.click === 'function' && typeof superProto?.dispatchEvent === 'function') {
+          const onMissedClick = (event) => {
+            if (!event.defaultPrevented) onLinkClick(event);
+          };
+          // Links whose click() or dispatchEvent() is running, so a call made during it leaves the outer call's listener in place.
+          const listening = new WeakSet();
+          const callHearingMissed = (anchor, bubbles, call) => {
+            if (!(anchor instanceof RealAnchor) || !anchor.hasAttribute('download') || (anchor.isConnected && bubbles) || listening.has(anchor)) {
+              return call();
+            }
+            listening.add(anchor);
+            anchor.addEventListener('click', onMissedClick);
+            try {
+              return call();
+            } finally {
+              listening.delete(anchor);
+              anchor.removeEventListener('click', onMissedClick);
+            }
+          };
+          anchorProto.click = function () {
+            return callHearingMissed(this, true, () => superProto.click.call(this));
+          };
+          anchorProto.dispatchEvent = function (event) {
+            const call = () => superProto.dispatchEvent.call(this, event);
+            return event instanceof RealMouseEvent && event.type === 'click' ? callHearingMissed(this, event.bubbles, call) : call();
+          };
+        }
+
+        const originalOpen = window.open;
+        window.open = function (url) {
+          realParent.postMessage({
+            type: "openExternal",
+            href: url,
+          }, "*");
+        };
+
+        window.addEventListener('error', (event) => {
+          realParent.postMessage({ type: 'console', message: 'Uncaught Error: ' + event.message }, '*');
+        });
+        // Only for a page that still shows nothing a second later: one that draws usually works on after a refused sound or a failed side call.
+        // A frame hidden behind the code view has no height, so a full-window canvas there would read as empty.
+        window.addEventListener('unhandledrejection', (event) => setTimeout(() => {
+          if (event.defaultPrevented || document.readyState === 'loading' || !window.innerHeight) return;
+          for (const el of document.querySelectorAll('body *')) {
+            if (el.getBoundingClientRect().height > 0) return;
+          }
+          if (document.body?.innerText.trim()) return;
+          realParent.postMessage({ type: 'console', message: 'Uncaught Error: ' + (event.reason?.message || event.reason) }, '*');
+        }, 1000));
+
+        try {
+          (() => {
+            const l=URL;function guardAgainstLeaving(t,d,g){const{navigation:n}=t;if(t===t.top||!(n instanceof t.EventTarget&&"currentEntry"in n))return()=>{};const{document:i,navigator:s}=t,o="userAgentData"in s,v=o?/^(about|blob):/:/^(?!https?:|data:)/,c=a=>{const{canIntercept:f,destination:u,downloadRequest:h}=a;if(a.defaultPrevented||!a.cancelable||f||h!==null||v.test(u.url)||(a.preventDefault(),!i.hasFocus()||!o&&i.activeElement?.matches(":read-write")))return;const e=new l(u.url),r=new l(i.baseURI);e.origin!==r.origin?s.userActivation?.isActive!==!1&&d(e.href):o&&e.hash&&e.pathname+e.search===r.pathname+r.search&&g?.(e.hash.slice(1))};return n.addEventListener("navigate",c),()=>n.removeEventListener("navigate",c)}
+            guardAgainstLeaving(window, (href) => followLink(href, ""), (fragment) => {
+              if (false) moveAddress(fragment);
+              scrollToFragment(fragment, document.activeElement ?? document.documentElement);
+            });
+          })();
+        } catch (e) {}
+
+        try {
+          (() => {
+            const m=1e3,b=Reflect.apply;function lacksWebgl(e,l=Object.getOwnPropertyDescriptor(e.HTMLCanvasElement.prototype,"getContext")?.value){if(typeof e.WebGLRenderingContext!="function")return!0;if(typeof l!="function")return!1;const u=e.document.createElement("canvas"),o=b(l,u,["webgl"])??b(l,u,["experimental-webgl"]);return o instanceof e.WebGLRenderingContext&&o.getExtension("WEBGL_lose_context")?.loseContext(),o===null}function watchWebgl(e,l){const u=e.setTimeout.bind(e),o=e.HTMLCanvasElement.prototype,i=Object.getOwnPropertyDescriptor(o,"getContext"),f=i?.value;if(!i||typeof f!="function")return()=>{};let s=!1,d=!1,p=!1,c=null;const g=new WeakSet,h=new WeakSet,C=t=>{const{width:n,height:r}=t.getBoundingClientRect();return t.isConnected&&t.ownerDocument===e.document&&n>0&&r>0},a=()=>{d||(d=p)},L=(t,n,r)=>{if(n!=="webgl"&&n!=="webgl2"&&n!=="experimental-webgl"){r&&h.add(t);return}if(r){c=!0;return}s||g.has(t)||(c??(c=!lacksWebgl(e,f)),!c&&(g.add(t),e.addEventListener("error",a),e.addEventListener("unhandledrejection",a),p=!0,u(()=>{p=!1},0),u(()=>{!s&&!h.has(t)&&(d||C(t))&&(s=!0,l())},1e3)))};return Object.defineProperty(o,"getContext",{...i,value:function(...n){const r=b(f,this,n);try{L(this,n[0],r!==null)}catch{}return r}}),()=>{s=!0,e.removeEventListener("error",a),e.removeEventListener("unhandledrejection",a),Object.defineProperty(o,"getContext",i)}}
+            watchWebgl(window, () => realParent.postMessage({ type: 'webglUnavailable' }, '*'));
+          })();
+        } catch (e) {}
+
+        try {
+          (() => {
+            const H=Reflect.apply,x=/^(pointer|mouse)(down|up)$|^touch(start|end)$|^click$/,R=500;function gateFocus(t,M){const o=t.document,a=o.hasFocus.bind(o),m=t.setTimeout.bind(t),g=t.queueMicrotask.bind(t),y=t.performance.now.bind(t.performance),L=t.Element;let l=null,i={},E=null,f=!1,d=!1,p=0;const r=(e,n)=>{const s=e,b=s[n];return s[n]=function(...v){const k=t.event;if(a()||y()<p||k?.isTrusted&&x.test(k.type)){H(b,this,v);return}E=o.activeElement,this instanceof L?(this===l||!f)&&(i={...this===l&&i,[n]:v},l=this,f=!0,g(()=>f=!1)):l??(l=o.body),d||(d=!0,M())},()=>{s[n]=b}},S=[r(t,"focus"),r(t.HTMLElement.prototype,"focus"),r(t.SVGElement.prototype,"focus"),r(t.HTMLInputElement.prototype,"select"),r(t.HTMLTextAreaElement.prototype,"select")];let u=null;const T=()=>{const e=u;if(u=null,!a())return;const n=l,s=i;l=null,i={},(o.activeElement===o.body||e===null&&o.activeElement===E)&&o.getSelection()?.isCollapsed!==!1&&(e===null||e==="mouse")&&(n?.localName==="iframe"&&n.blur(),n?.focus({...s.focus?.[0],...e!==null&&{preventScroll:!0}}),s.select&&n?.select())},h=new AbortController,c=(e,n,s=!1)=>t.addEventListener(e,n,{capture:s,signal:h.signal});c("pointerdown",e=>u=e.pointerType,!0),c("pointercancel",()=>u=null,!0),c("blur",()=>{u=null,p=0});for(const e of["pointerdown","contextmenu"])c(e,n=>{n.isTrusted&&(n.button>0||e==="contextmenu")&&(p=y()+R)},!0);return c("click",e=>{e.isTrusted&&u!==null&&!a()&&t.focus(),m(T,0)},!0),c("focus",()=>{d=!1,m(()=>u??T(),0)},!0),()=>{h.abort(),l=null,S.forEach(e=>e())}}
+            gateFocus(window, () => realParent.postMessage({ type: 'focusRefused' }, '*'));
+          })();
+        } catch (e) {}
+
+        // Last, so that if this throws, everything above is already set up. In its own function, so that its names stay local.
+        (() => {
+          function forwardConsole(o,t){const e=String,i=n=>{try{return e(n??"")}catch{return"[object Object]"}},c=[["log",""],["error","Error: "],["warn","Warning: "]];for(const[n,s]of c){const f=o[n];o[n]=(...r)=>{f.apply(o,r),t(s+r.map(i).join(" "))}}}
+          forwardConsole(window.console, (line) => realParent.postMessage({ type: 'console', message: line }, '*'));
+        })();
+      })();
+    </script>
+  <style id="claude-scrollbar">@layer claude-scrollbar{*{scrollbar-width:thin}html{scrollbar-color:rgb(128 128 128 / 50%) transparent}}</style><script>
+(function(){"use strict";if(window.__coworkHtmlReviewGuest)return;window.__coworkHtmlReviewGuest=true;var READY_TYPE="__cowork_html_review_ready__";var SEL_CLASS="__cwhr-sel";var CONTEXT_LEN=32;var EXACT_CAP=1000;var port=null;var mode=false;var chordLive=false;var pins=[];var quotes=[];var quoteRanges=Object.create(null);var hoverEl=null;var selected=null;var hasTextSel=false;var rafPending=false;var _MessageChannel=window.MessageChannel;var _topPost=window.top.postMessage.bind(window.top);function visibleText(el){var t=typeof el.innerText==="string"?el.innerText:(el.textContent||"");return t.replace(/\s+/g," ").trim();}var BUBBLE_CURSOR= "url(\"data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'24'%20height%3D'24'%20viewBox%3D'0%200%2024%2024'%3E%3Cpath%20d%3D'M12%20.5h0A11.5%2011.5%200%200%201%2023.5%2012v0A11.5%2011.5%200%200%201%2012%2023.5H2.5a2%202%200%200%201-2-2V12A11.5%2011.5%200%200%201%2012%20.5Z'%20fill%3D'%23fff'%20stroke%3D'rgba(0%2C0%2C0%2C0.22)'%20stroke-width%3D'1'%2F%3E%3C%2Fsvg%3E\") 1 23, url(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACjklEQVR4AbRWS2gaURR9TGpiFTUEWpKQkA+EruqizWcRSBRT/G8KKpXiyo0ra1fVNiDFLmypFUo3iht/iO4Uay1FGwtFECl1p6KWLly4CGqrSMTY+wRFQ7WhGYd7Zu697845b+7M8B6BJh+UxcXFG3a7XeTxeHQAC+C12+1+ZLPZhHgMbp8FjLWxAkaj8U48Hg8lEomfIpEoLBaLLTKZTAd4LJFI3kD8HsZ+xGKxoMFgYI9T+JvAtUAg8FylUn3hcDj8ra0t6vLyMmKxWIhCofSAfZyDMRqXy+Wr1eqvPp/vKYjMAEZsRMDpdN6MRCKf+Xz+8cbGBm2kckIAtXShUGgKh8Mnfr9/Ybh0IKDT6a4vLS19EggE+wwGY7jmUj6TyUTQyv35+fmP0MbBexkISKVS+97e3u1LsU0oAo67Go3G1i/pCZjN5t3Nzc0H/zPzPlH/ip8EWvbQYrHs4hwWmN3e3n62traGfZy7MtbX12fYbPYTIKIQOzs7C6urq/cgINVWVlaO4EtjEXq9nken06mksgMZtJthtVp5xNzcHBsEIEWu0Wg0RKVS2USz2WTigFx6hPCkMTfRarXgB6WQzd/j63Q6bdK+nB7j0KnRaCCCIMpTE4D2oEql8m1qAvV6/VSr1U5PIJvN+qFjv6fyBIVC4ZfD4XgJAmekC9RqNZROp1+FQqESCCDSBWCVO1EoFC8wOQZpAnjm0Wj0O/xX94H4HNAzotvtNnreFU6lUgllMplAMpnclcvlp8NURC6Xi8BLGc5N9NvtNqpWq6hcLqN8Pn8OLUkAMe/g4EAOG4WzizcTJpPpA6zFIpfL9Ra2I45/IRgM2lKp1LtisXjs9XpvHR4eHimVythF4n78BwAA//8r8OPFAAAABklEQVQDAPCY8Oae0TJxAAAAAElFTkSuQmCC\") 1 23, default";function injectStyle(){var style=document.createElement("style");var ANY=":not(#__cwhr_)";var MODE="html[data-cwhr-mode]";var COMPOSING=MODE+"[data-cwhr-composing]";style.textContent="."+SEL_CLASS+"{outline:1px solid hsl(40 70% 40%) !important;outline-offset:0;}"+MODE+ANY+","+MODE+" "+ANY+"{cursor:"+BUBBLE_CURSOR+" !important;}"+COMPOSING+ANY+","+COMPOSING+" "+ANY+"{cursor:default !important;}";(document.head||document.documentElement).appendChild(style);}function isUnique(sel){try{return document.querySelectorAll(sel).length===1;}catch(e){return false;}}function hasInvisibles(s){for(var i=0;i<s.length;i++){var c=s.codePointAt(i);if(c>0xffff)i++;if(c<=0x1f||c===0x061c||c===0x070f||c===0xad||(c>=0x7f&&c<=0x9f)||c===0x115f||c===0x1160||c===0x180e||(c>=0x200b&&c<=0x200f)||(c>=0x202a&&c<=0x202e)||(c>=0x2060&&c<=0x2064)||(c>=0x2066&&c<=0x2069)||c===0x3164||c===0xfeff||(c>=0xfff9&&c<=0xfffb)||c===0xffa0||(c>=0xe0000&&c<=0xe007f)){return true;}}return false;}function escapeAttr(v){return String(v).replace(/\\/g,"\\\\").replace(/"/g,'\\"');}function selectorFor(el){if(el.id&&!hasInvisibles(el.id)&&isUnique("#"+CSS.escape(el.id))){return"#"+CSS.escape(el.id);}for(var i=0;i<el.attributes.length;i++){var attr=el.attributes[i];if(attr.name.indexOf("data-")===0&&attr.value&&!hasInvisibles(attr.value)){var dataSel="["+attr.name+'="'+escapeAttr(attr.value)+'"]';if(isUnique(dataSel))return dataSel;}}var parts=[];var cur=el;while(cur&&cur!==document.body&&cur.nodeType===1&&parts.length<10){var sel=cur.tagName.toLowerCase();var parent=cur.parentElement;if(parent){var sameTag=[];for(var c=0;c<parent.children.length;c++){if(parent.children[c].tagName===cur.tagName)sameTag.push(parent.children[c]);}if(sameTag.length>1){sel+=":nth-of-type("+(sameTag.indexOf(cur)+1)+")";}}parts.unshift(sel);if(parent&&parent.id&&!hasInvisibles(parent.id)&&isUnique("#"+CSS.escape(parent.id))){parts.unshift("#"+CSS.escape(parent.id));return parts.join(" > ");}cur=parent;}if(cur===document.body){parts.unshift("body");return parts.join(" > ");}return":not(*)";}function descriptorFor(el){var tag="<"+el.tagName.toLowerCase()+">";var idPart=el.id?" #"+el.id:"";var text=visibleText(el).slice(0,60);var textPart=text?' "'+text+'"':"";var section=el.parentElement;while(section&&(!section.id||section.id.indexOf("artifacts-component-root")===0)){section=section.parentElement;}var sectionPart=section&&section.id?" in #"+section.id:"";return(tag+idPart+textPart+sectionPart).slice(0,400);}function textOffset(node,offset){var body=document.body;if(!body)return-1;try{var pre=document.createRange();pre.selectNodeContents(body);pre.setEnd(node,offset);return pre.toString().length;}catch(e){return-1;}}function rangeForOffsets(start,end){var body=document.body;if(!body)return null;var walker=document.createTreeWalker(body,NodeFilter.SHOW_TEXT);var acc=0;var range=document.createRange();var haveStart=false;var t;while((t=walker.nextNode())){var next=acc+t.length;if(!haveStart&&start<next){range.setStart(t,start-acc);haveStart=true;}if(haveStart&&end<=next){range.setEnd(t,end-acc);return range;}acc=next;}return null;}function locateQuote(text,q){var ex=q.exact;if(!ex)return null;var hint=q.startOffset>=0?q.startOffset:0;if(text.slice(hint,hint+ex.length)===ex){return{start:hint,end:hint+ex.length};}var best=-1;var bestScore=-1;var bestDist=Infinity;var scanned=0;for(var idx=text.indexOf(ex);idx!==-1&&++scanned<=1000;idx=text.indexOf(ex,idx+1)){var before=text.slice(Math.max(0,idx-CONTEXT_LEN),idx);var after=text.slice(idx+ex.length,idx+ex.length+CONTEXT_LEN);var sc=0;for(var i=1;i<=q.prefix.length&&i<=before.length;i++){if(q.prefix[q.prefix.length-i]!==before[before.length-i])break;sc++;}for(var j=0;j<q.suffix.length&&j<after.length;j++){if(q.suffix[j]!==after[j])break;sc++;}var dist=Math.abs(idx-hint);if(sc>bestScore||(sc===bestScore&&dist<bestDist)){best=idx;bestScore=sc;bestDist=dist;}}return best===-1?null:{start:best,end:best+ex.length};}function collectLineRects(range,cap){var out=[];var rects=range.getClientRects();for(var i=0;i<rects.length&&out.length<cap;i++){var r=rects[i];if(r.width>0&&r.height>0){out.push({x:r.left,y:r.top,w:r.width,h:r.height});}}return out;}function reportTextSel(full){if(!port)return;var sel=window.getSelection();var r=sel&&!sel.isCollapsed&&sel.rangeCount>0?sel.getRangeAt(0):null;if(!r||!document.body||!document.body.contains(r.commonAncestorContainer)){if(hasTextSel){hasTextSel=false;port.postMessage({type:"textClear"});}return;}hasTextSel=true;var br=r.getBoundingClientRect();var msg={type:"textCapture",rect:{x:br.left,y:br.top,w:br.width,h:br.height},lineRects:collectLineRects(r,80),};if(full){var live=document.body.textContent||"";var so=textOffset(r.startContainer,r.startOffset);var eo=textOffset(r.endContainer,r.endOffset);if(so<0||eo<0||eo<=so){hasTextSel=false;port.postMessage({type:"textClear"});return;}var capped=Math.min(eo,so+EXACT_CAP);if(capped<eo){var hc=live.charCodeAt(capped-1);if(hc>=0xd800&&hc<=0xdbff)capped--;}if(capped<=so){port.postMessage(msg);return;}var pStart=Math.max(0,so-CONTEXT_LEN);var pc=live.charCodeAt(pStart);if(pc>=0xdc00&&pc<=0xdfff)pStart++;var sEnd=Math.min(live.length,capped+CONTEXT_LEN);if(sEnd<live.length){var sc=live.charCodeAt(sEnd-1);if(sc>=0xd800&&sc<=0xdbff)sEnd--;}msg.exact=live.slice(so,capped);msg.prefix=live.slice(pStart,so);msg.suffix=live.slice(capped,sEnd);msg.startOffset=so;msg.endOffset=capped;}port.postMessage(msg);}function clearSelection(){if(selected){selected.classList.remove(SEL_CLASS);selected=null;}}var cursorPending=false;var cursorX=-1;var cursorY=-1;function flushCursor(){cursorPending=false;if(!port)return;var hover=null;if(hoverEl&&hoverEl.nodeType===1&&hoverEl!==document.body&&hoverEl!==document.documentElement){var r=hoverEl.getBoundingClientRect();if(r.width>0||r.height>0){hover={x:r.left,y:r.top,w:r.width,h:r.height};}}port.postMessage({type:"cursor",x:cursorX,y:cursorY,hover:hover});}function scheduleCursor(){if(!cursorPending){cursorPending=true;requestAnimationFrame(flushCursor);}}function onMouseMove(ev){if(!mode||!port)return;var de=document.documentElement;if(ev.clientX>=de.clientWidth||ev.clientY>=de.clientHeight){cursorX=-1;cursorY=-1;hoverEl=null;scheduleCursor();return;}cursorX=ev.clientX;cursorY=ev.clientY;hoverEl=ev.target;scheduleCursor();}function onMouseLeave(){if(!mode||!port)return;cursorX=-1;cursorY=-1;hoverEl=null;scheduleCursor();}function onClick(ev){if(!port)return;if(!mode){var s=window.getSelection();if(!s||s.isCollapsed)port.postMessage({type:"clickAway"});return;}ev.preventDefault();ev.stopImmediatePropagation();var el=ev.target;if(!el||el.nodeType!==1||el===document.documentElement)return;if(el===document.body&&el.firstElementChild){}clearSelection();selected=el;el.classList.add(SEL_CLASS);var rect=el.getBoundingClientRect();var pinX=rect.width>0?(ev.clientX-rect.left)/ rect.width:0.5;var pinY=rect.height>0?(ev.clientY-rect.top)/ rect.height:0.5;port.postMessage({type:"capture",selector:selectorFor(el).slice(0,1000),textHint:visibleText(el).slice(0,300),descriptor:descriptorFor(el),pinX:Math.min(1,Math.max(0,pinX)),pinY:Math.min(1,Math.max(0,pinY)),clientX:ev.clientX,clientY:ev.clientY,rectLeft:rect.left,rectTop:rect.top,});}var keyEl=null;var keyAt=-1;function collectBlocks(el,out){for(var c=el.firstElementChild;c&&out.length<2000;c=c.nextElementSibling){var drawn=c.getClientRects().length>0;var own=/^(tr|img|svg|canvas|video|iframe|input|select|textarea|button|pre)$/i.test(c.tagName);for(var n=c.firstChild;n&&!own;n=n.nextSibling)own=n.nodeType===3&&/\S/.test(n.data);if(drawn&&own)out.push(c);var inner=!own||c.querySelector("p,h1,h2,h3,h4,h5,h6,li")?c:null;if(inner&&(drawn||getComputedStyle(c).display==="contents"))collectBlocks(inner,out);}return out;}function step(by){if(!mode||by===null)return onMouseLeave();var blocks=collectBlocks(document.body,[]);var i=blocks.indexOf(keyEl);if(i<0&&keyEl)i=keyAt;if(i<0)i=blocks.findIndex(function(b){return b.getBoundingClientRect().top>=0;});else i+=by;i=Math.max(0,Math.min(blocks.length-1,i));keyEl=hoverEl=blocks[i]||null;keyAt=i;if(!keyEl)return;keyEl.scrollIntoView({block:"nearest",inline:"nearest",behavior:"instant"});cursorX=cursorY=0;scheduleCursor();var tag=keyEl.tagName.toLowerCase();var label=keyEl.getAttribute("aria-label");var drawn=tag==="svg"||tag==="canvas"||keyEl.getAttribute("role")==="img";var text=(drawn&&label)||visibleText(keyEl)||keyEl.getAttribute("alt")||label||"";port.postMessage({type:"block",text:text.slice(0,300),tag:tag,index:i,count:blocks.length});}function pick(){if(!mode||!keyEl||!keyEl.isConnected)return;var r=keyEl.getBoundingClientRect();var nothing=function(){};onClick({target:keyEl,clientX:Math.max(0,r.left)+Math.min(12,r.width/ 2),clientY:Math.max(0,r.top)+Math.min(12,r.height/ 2),preventDefault:nothing,stopImmediatePropagation:nothing,});}function reportRects(){rafPending=false;if(!port)return;if(selected){var sr=selected.getBoundingClientRect();port.postMessage({type:"selRect",left:sr.left,top:sr.top,w:sr.width,h:sr.height,found:(sr.width>0||sr.height>0)&&document.documentElement.contains(selected),});}var rects=[];for(var i=0;i<pins.length;i++){var p=pins[i];var el=null;try{el=document.querySelector(p.selector);}catch(e){el=null;}if(!el){rects.push({id:p.id,x:0,y:0,found:false});continue;}var r=el.getBoundingClientRect();if(r.width===0&&r.height===0){rects.push({id:p.id,x:0,y:0,found:false});continue;}rects.push({id:p.id,x:r.left+p.pinX*r.width,y:r.top+p.pinY*r.height,found:true,});}var quoteRects=[];if(quotes.length>0){var live=null;for(var qi=0;qi<quotes.length;qi++){var q=quotes[qi];var qr=quoteRanges[q.id];if(qr===undefined){if(live===null){live=(document.body&&document.body.textContent)||"";}var loc=locateQuote(live,q);qr=(loc&&rangeForOffsets(loc.start,loc.end))||null;quoteRanges[q.id]=qr;}var qlr=qr?collectLineRects(qr,80):[];quoteRects.push(qlr.length>0?{id:q.id,found:true,lineRects:qlr}:{id:q.id,found:false,lineRects:[]});}}sentScrollY=window.scrollY||0;port.postMessage({type:"rects",rects:rects,quoteRects:quoteRects,scrollY:sentScrollY,});}function scheduleRects(){if(rafPending)return;rafPending=true;var done=false;function run(){if(done)return;done=true;reportRects();}requestAnimationFrame(run);setTimeout(run,150);}var sentScrollY=0;function scheduleAnchoredRects(){if(selected||pins.length>0||quotes.length>0)scheduleRects();}function setMode(on){mode=!!on;document.documentElement.toggleAttribute("data-cwhr-mode",mode);if(!mode){hoverEl=keyEl=null;clearSelection();}}function setComposing(open){document.documentElement.toggleAttribute("data-cwhr-composing",!!open);}function onPortMessage(ev){var data=ev.data;if(!data)return;if(data.type==="mode")setMode(data.on);else if(data.type==="composing")setComposing(data.open);else if(data.type==="chordLive")chordLive=!!data.on;else if(data.type==="step")step(data.by);else if(data.type==="pick")pick();else if(data.type==="pins"){pins=Array.isArray(data.pins)?data.pins:[];scheduleRects();}else if(data.type==="quotes"){quotes=Array.isArray(data.quotes)?data.quotes:[];quoteRanges=Object.create(null);scheduleRects();}else if(data.type==="clearSelection"){clearSelection();}else if(data.type==="clearTextSel"){var ts=window.getSelection();if(ts)ts.removeAllRanges();hasTextSel=false;}else if(data.type==="restoreScroll"){var ry=Number(data.y);if(isFinite(ry)&&ry>0){window.scrollTo(0,ry);window.addEventListener("load",function(){window.scrollTo(0,ry);});}}}function start(){injectStyle();var channel=new _MessageChannel();port=channel.port1;port.onmessage=onPortMessage;_topPost({type:READY_TYPE,token:"3491f5ce-8040-42ab-be4e-f7a92059cc62"},"*",[channel.port2]);document.addEventListener("mousemove",onMouseMove,true);document.documentElement.addEventListener("mouseleave",onMouseLeave);document.addEventListener("click",onClick,true);function onSelCommit(){reportTextSel(true);}document.addEventListener("mouseup",onSelCommit,true);document.addEventListener("keyup",onSelCommit,true);document.addEventListener("selectionchange",function(){var s=window.getSelection();if(hasTextSel&&(!s||s.isCollapsed))reportTextSel(false);});document.addEventListener("keydown",function(ev){if(ev.key==="Escape"&&port)port.postMessage({type:"dismiss"});if(chordLive&&port&&ev.altKey){var t=ev.composedPath?ev.composedPath()[0]:ev.target;var editable=!!t&&(t.isContentEditable===true||t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.tagName==="SELECT");if(!editable&&ev.code==="KeyC"&&!ev.metaKey&&!ev.ctrlKey&&!ev.shiftKey)ev.preventDefault();if(!ev.repeat){port.postMessage({type:"chord",key:ev.key,code:ev.code,meta:ev.metaKey,ctrl:ev.ctrlKey,shift:ev.shiftKey,composing:ev.isComposing===true,editable:editable,});}}},true);var textSelPending=false;function scheduleTextSel(){if(textSelPending)return;textSelPending=true;requestAnimationFrame(function(){textSelPending=false;reportTextSel(false);});}function onLayoutChange(){scheduleRects();if(mode&&hoverEl)scheduleCursor();if(hasTextSel)scheduleTextSel();}window.addEventListener("scroll",onLayoutChange,true);window.addEventListener("resize",onLayoutChange);var observer=new MutationObserver(function(){quoteRanges=Object.create(null);scheduleAnchoredRects();if(hasTextSel)scheduleTextSel();});function observe(){if(document.body)observer.observe(document.body,{childList:true,subtree:true});}if(document.body)observe();else document.addEventListener("DOMContentLoaded",observe);setInterval(function(){if((window.scrollY||0)!==sentScrollY)scheduleRects();else scheduleAnchoredRects();},2000);}if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",start);}else{start();}})();
+</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chỉnh dữ liệu quiz</title>
+<style>
+:root{--bg:#f6f5f2;--card:#fff;--ink:#23221f;--mute:#6f6c66;--line:#e2dfd8;--acc:#2f6f5e;--acc-ink:#fff;--warn:#b26a00;--warn-bg:#fff3dc;--bad:#b3261e;--chip:#eef4f1;--on:#dff0e8}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--card:#1f1f1c;--ink:#ecebe6;--mute:#a09d95;--line:#33322d;--acc:#6fbfa6;--acc-ink:#10201b;--warn:#f0b35a;--warn-bg:#3a2f18;--bad:#ff8a80;--chip:#26302c;--on:#27443a}}
+*{box-sizing:border-box}
+html{scroll-padding-top:70px}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header.top{position:sticky;top:0;z-index:10;background:var(--card);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+header.top h1{font-size:16px;margin:0 8px 0 0}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tabs button{border:1px solid var(--line);background:transparent;color:var(--ink);padding:6px 12px;border-radius:999px;cursor:pointer;font:inherit}
+.tabs button.on{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
+.sp{flex:1}
+.stat{font-size:13px;color:var(--mute)}
+.stat.dirty{color:var(--warn);font-weight:600}
+button.pri{background:var(--acc);color:var(--acc-ink);border:0;padding:8px 14px;border-radius:8px;font:inherit;font-weight:600;cursor:pointer}
+button.sec{background:transparent;color:var(--ink);border:1px solid var(--line);padding:7px 12px;border-radius:8px;font:inherit;cursor:pointer}
+main{max-width:1080px;margin:0 auto;padding:16px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.muted{color:var(--mute);font-size:13px}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 8px;max-width:100%}
+textarea{width:100%;resize:vertical}
+input[type=number]{width:80px}
+details.card{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:8px}
+details.card>summary{cursor:pointer;padding:10px 14px;display:flex;gap:10px;align-items:baseline;list-style:none}
+details.card>summary::-webkit-details-marker{display:none}
+details.card>summary::before{content:"▸";color:var(--mute)}
+details.card[open]>summary::before{content:"▾"}
+.num{font-weight:700;white-space:nowrap}
+.sum{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{font-size:12px;color:var(--mute);white-space:nowrap}
+.badge.warn{color:var(--warn)}
+.body{padding:4px 14px 14px;border-top:1px solid var(--line)}
+.fields{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:10px 0}
+.fields label{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--mute)}
+.fields label.grow{flex:1;min-width:240px}
+.ans{border:1px solid var(--line);border-radius:8px;padding:8px;margin:8px 0;background:var(--bg)}
+.ahead{display:flex;gap:8px;align-items:flex-start}
+.ahead .idx{width:20px;color:var(--mute);padding-top:6px;text-align:right}
+.btns{display:flex;gap:4px}
+.btns button,.x{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:6px;cursor:pointer;padding:3px 8px;font:inherit}
+.axes{display:grid;grid-template-columns:repeat(4,1fr);gap:8px 10px;margin:8px 0 4px 28px}
+@media(max-width:640px){.axes{grid-template-columns:repeat(2,1fr);margin-left:0}}
+.axc{display:flex;flex-direction:column;font-size:12px;color:var(--ink);align-items:stretch;gap:2px}
+.axc select{padding:3px 2px}
+.axc select.on{background:var(--on);font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0 28px;align-items:center}
+@media(max-width:640px){.chips{margin-left:0}}
+.chip{display:inline-flex;gap:2px;align-items:center;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:2px 4px}
+.chip select{border:0;background:transparent;padding:2px}
+.x{padding:0 7px}
+.add{border:1px dashed var(--mute);background:transparent;color:var(--ink);border-radius:999px;padding:3px 10px;cursor:pointer;font:inherit;font-size:13px}
+.legend{display:block;font-size:12px;color:var(--mute);margin-bottom:12px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.legend b{color:var(--ink)}
+.vec{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:8px 10px;margin:6px 0}
+.vec label{font-size:12px;color:var(--ink);display:flex;flex-direction:column;gap:2px}
+.vec input{width:100%}
+.phase{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:8px 0;background:var(--bg)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin:10px 0}
+.grid2 label{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--mute)}
+.grid2 label small{font-size:11px}
+.grid2 input[type=text],.grid2 input[type=number]{width:100%}
+table.t{border-collapse:collapse;width:100%;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:8px 0 16px}
+table.t th,table.t td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
+.barv{display:inline-block;height:10px;background:var(--acc);border-radius:5px;vertical-align:middle}
+h2{font-size:16px;margin:20px 0 6px}
+.issue{background:var(--warn-bg);color:var(--ink);border-radius:8px;padding:6px 10px;margin:4px 0;font-size:13px}
+.ok{color:var(--acc)}
+.axrow{display:grid;grid-template-columns:28px 1fr 1fr;gap:8px;margin:4px 0;align-items:center}
+.axrow input{width:100%}
+</style>
+</head>
+<body id="artifacts-component-root-html">
+<header class="top">
+  <h1>Chỉnh dữ liệu quiz</h1>
+  <div class="tabs" id="tabs"></div>
+  <span class="sp"></span>
+  <span class="stat" id="stat">Đã lưu</span>
+  <button class="sec" id="openbtn" type="button">Mở file…</button>
+  <button class="pri" id="savebtn" type="button">Lưu data.html</button>
+  <input type="file" id="openin" accept=".html,.json,text/html,application/json" hidden="">
+</header>
+<main id="app"></main>
+
+<script id="quiz-data" type="application/json">
+{
+ "title": "Bạn giống ai?",
+ "subtitle": "Trả lời theo phản xạ đầu tiên của bạn. Không có đáp án đúng hay sai.",
+ "axes": [
+  {
+   "k": "A",
+   "lo": "Lạnh lùng",
+   "hi": "Ấm áp, quan tâm"
+  },
+  {
+   "k": "B",
+   "lo": "Tự do, ngẫu hứng",
+   "hi": "Kỷ luật, nguyên tắc"
+  },
+  {
+   "k": "C",
+   "lo": "Hướng nội",
+   "hi": "Hướng ngoại, thu hút"
+  },
+  {
+   "k": "D",
+   "lo": "Mềm mỏng",
+   "hi": "Quyết đoán, thích dẫn dắt"
+  },
+  {
+   "k": "E",
+   "lo": "Thực tế",
+   "hi": "Lý tưởng hóa, mơ mộng"
+  },
+  {
+   "k": "F",
+   "lo": "Thực dụng",
+   "hi": "Sáng tạo, nghệ thuật"
+  },
+  {
+   "k": "G",
+   "lo": "Tự ti, bất ổn",
+   "hi": "Tự tin"
+  },
+  {
+   "k": "H",
+   "lo": "Vì bản thân",
+   "hi": "Vị tha, sẵn sàng hy sinh"
+  }
+ ],
+ "gain": 1.5,
+ "sigCap": 16,
+ "flatRange": 0.45,
+ "setNames": {
+  "1": "Ngày thường",
+  "2": "Khi bị dồn vào chân tường"
+ },
+ "calibration": {
+  "bias": {
+   "kevin": -7,
+   "elysia": -5.2,
+   "aponia": -7.3,
+   "eden": -11.9,
+   "villv": -12.9,
+   "kalpas": -9.3,
+   "su": 0,
+   "sakura": -3.9,
+   "kosma": -7.8,
+   "mobius": -3.1,
+   "griseo": -18,
+   "hua": -9.7,
+   "pardo": -8.7
+  },
+  "T": 67.7
+ },
+ "characters": [
+  {
+   "id": "kevin",
+   "name": "Kevin",
+   "w": [1,1,1,1,1,1,1,1],
+   "phases": [
+    {
+     "label": "lúc ban đầu",
+     "v": [5,4,5,3,5,2,5,5],
+     "desc": "Hài hước, thu hút, có khả năng lãnh đạo. Tình yêu sâu đậm, trung thành, tử tế và luôn đặt người khác lên trên."
+    },
+    {
+     "label": "sau biến cố",
+     "v": [2,5,3,5,3,2,4,5],
+     "desc": "Sau biến cố trở nên lạnh lùng và nhẫn tâm, dù chẳng hề mong muốn điều đó."
+    }
+   ]
+  },
+  {
+   "id": "elysia",
+   "name": "Elysia",
+   "w": [1,1,1,1,1,1,1,1],
+   "phases": [
+    {
+     "label": "",
+     "v": [5,2,5,2,4,3,5,4],
+     "desc": "Dịu dàng, đôi khi hơi hài hước, luôn yêu mến mọi người, hay buông những lời ngọt như thính và tiệm cận sự hoàn hảo."
+    }
+   ]
+  },
+  {
+   "id": "aponia",
+   "name": "Aponia",
+   "w": [1,1,1,1,1,1,1,1],
+   "phases": [
+    {
+     "label": "",
+     "v": [4,5,2,4,4,1,4,4],
+     "desc": "Dịu dàng nhưng nghiêm khắc, kỷ luật, khắc kỷ, hơi áp đặt tư tưởng. Nhưng luôn mong mọi người được sống những giây phút bình yên và dịu dàng."
+    }
+   ]
+  },
+  {
+   "id": "eden",
+   "name": "Eden",
+   "w": [1,1,1,1,1,1,1,1],
+   "phases": [
+    {
+     "label": "lúc ban đầu",
+     "v": [4,2,4,2,5,5,5,3],
+     "desc": "Nghệ sĩ hào phóng, rất giàu có, xem nghệ thuật và giá trị vô hình hơn kim tiền."
+    },
+    {
+     "label": "sau biến cố",
+     "v": [4,2,2,2,3,5,3,3],
+     "desc": "Thấy nghệ thuật dần mất chỗ đứng khi sinh tồn thành vấn đề lớn, nên hay hoài niệm ngày xưa."
+    }
+   ]
+  },
+  {
+   "id": "villv",
+   "name": "Vill-V",
+   "w": [1,1,1,1,1,1,1,1],
+   "phases": [
+    {
+     "label": "",
+     "v": [3,2,4,2,3,5,2,3],
+     "desc": "Thiên tài cơ khí, thông minh, nghịch ngợm, sáng tạo, thích biểu diễn và ảo thuật. Sâu bên trong lại nghĩ mình còn quá tầm thường."
+    }
+   ]
+  },
+  {
+   "id": "kalpas",
+   "name": "Kalpas",
+   "w": [2,0,0,0,1,0,0,1.5],
+   "phases": [
+    {
+     "label": "",
+     "v": [5,3,3,3,2,3,3,4],
+     "desc": "Bề ngoài cộc cằn nhưng rất quan tâm, thích trẻ con, tử tế, giỏi nấu ăn và luôn xem trọng căn nhà để quay về."
+    }
+   ]
+  },
+  {
+   "id": "su",
+   "name": "Su",
+   "w": [2,1,0,2,1,0,0,1.5],
+   "phases": [
+    {
+     "label": "",
+     "v": [5,4,2,1,3,2,3,4],
+     "desc": "Dịu dàng, khiêm nhường, lịch thiệp. Một bác sĩ uyên bác và thấu tuệ."
+    }
+   ]
+  },
+  {
+   "id": "sakura",
+   "name": "SAKURA",
+   "w": [1,1,1,1,1,1,1,1],
+   "phases": [
+    {
+     "label": "",
+     "v": [3,5,2,5,2,1,4,4],
+     "desc": "Bề ngoài hơi lạnh lùng nhưng tiếp xúc mới thấy dịu dàng. Cực kỳ xem trọng gia đình và bao dung với họ, còn trong công việc thì quyết đoán, sát phạt."
+    }
+   ]
+  },
+  {
+   "id": "kosma",
+   "name": "Kosma",
+   "w": [1,1,1,1,1,1,1,1],
+   "phases": [
+    {
+     "label": "lúc ban đầu",
+     "v": [4,2,2,1,5,3,2,4],
+     "desc": "Chưa hoàn toàn trưởng thành, mang lý tưởng anh hùng, hướng nội. Quen thân thì nói rất nhiều."
+    },
+    {
+     "label": "sau biến cố",
+     "v": [3,2,1,2,2,3,2,4],
+     "desc": "Khép kín và thất vọng, hiểu rõ lý tưởng là không tưởng, nhưng vẫn luôn trân trọng chuyện của quá khứ."
+    }
+   ]
+  },
+  {
+   "id": "mobius",
+   "name": "Mobius",
+   "w": [1,1,1,1,1,1,1,1],
+   "phases": [
+    {
+     "label": "",
+     "v": [2,4,3,5,2,2,5,1],
+     "desc": "Tàn nhẫn với bản thân lẫn người khác, sẵn sàng làm tất cả vì thứ mình muốn. Hay dẫn dắt người khác làm theo ý mình, đôi khi trêu bằng vẻ vô hại đáng yêu, và thích động vật nhỏ."
+    }
+   ]
+  },
+  {
+   "id": "griseo",
+   "name": "Griseo",
+   "w": [1,1,1,1,1,1,1,1],
+   "phases": [
+    {
+     "label": "lúc còn nhỏ",
+     "v": [4,1,2,1,5,5,2,3],
+     "desc": "Trẻ con, ngây thơ, thích vẽ tranh và có năng khiếu đặc biệt."
+    },
+    {
+     "label": "khi trưởng thành",
+     "v": [4,3,3,3,4,5,4,4],
+     "desc": "Đã trưởng thành và trở nên đáng tin cậy."
+    }
+   ]
+  },
+  {
+   "id": "hua",
+   "name": "Hua",
+   "w": [1,1,1,1,1,1,1,1],
+   "phases": [
+    {
+     "label": "lúc ban đầu",
+     "v": [3,5,3,4,2,1,3,5],
+     "desc": "Thẳng thắn, kỷ luật, suy nghĩ đơn giản, quá xem trọng trách nhiệm đến mức không ngại hy sinh. Còn mơ hồ về tư tưởng và chưa hiểu rõ lòng mình."
+    },
+    {
+     "label": "sau nhiều biến cố",
+     "v": [4,4,3,3,3,1,4,5],
+     "desc": "Sau rất nhiều biến cố đã hiểu chính mình hơn."
+    }
+   ]
+  },
+  {
+   "id": "pardo",
+   "name": "Pardofelis",
+   "w": [1,1,1,1,1,1,1,1],
+   "phases": [
+    {
+     "label": "lúc ban đầu",
+     "v": [4,1,5,1,3,2,3,2],
+     "desc": "Tinh nghịch, ham vui, như mèo con. Tốt với chó mèo, thích lấp lánh, sợ chết."
+    },
+    {
+     "label": "khi trưởng thành",
+     "v": [4,2,4,2,3,2,4,5],
+     "desc": "Đứng trước việc lớn vẫn vượt qua được nội tâm và sẵn sàng hi sinh."
+    }
+   ]
+  }
+ ],
+ "questions": [
+  {
+   "id": 1,
+   "set": 1,
+   "w": 1,
+   "text": "Bạn có bao giờ bóc tôm, nướng thịt hay gắp đồ ăn cho người khác?",
+   "ans": [
+    {
+     "t": "Có, hay làm",
+     "s": {
+      "A": 2,
+      "D": 1
+     },
+     "g": {
+      "elysia": 1,
+      "aponia": 1,
+      "sakura": 1
+     }
+    },
+    {
+     "t": "Thỉnh thoảng thấy thì làm",
+     "s": {
+      "A": 1
+     },
+     "g": {}
+    },
+    {
+     "t": "Không, tôi nghĩ ai cũng tự lo được",
+     "s": {
+      "A": -1,
+      "D": 1
+     },
+     "g": {
+      "hua": 1
+     }
+    },
+    {
+     "t": "Không làm, vì toàn có người gắp cho tôi trước",
+     "s": {
+      "D": -1,
+      "G": -1
+     },
+     "g": {
+      "griseo": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "set": 1,
+   "w": 1,
+   "text": "Ngày nghỉ bạn thích làm gì nhất? Coi như có đủ tiền để làm thứ mình thích.",
+   "ans": [
+    {
+     "t": "Ở nhà chơi với chó mèo",
+     "s": {
+      "A": 1,
+      "C": -1
+     },
+     "g": {
+      "pardo": 2,
+      "mobius": 1
+     }
+    },
+    {
+     "t": "Ở nhà cày game, đọc sách, dọn dẹp, nấu nướng",
+     "s": {
+      "C": -2
+     },
+     "g": {
+      "kalpas": 2
+     }
+    },
+    {
+     "t": "Du lịch mở mang tầm mắt",
+     "s": {
+      "C": 1,
+      "E": 1,
+      "F": 1
+     },
+     "g": {}
+    },
+    {
+     "t": "Tụ tập bạn bè, ăn uống, cafe",
+     "s": {
+      "A": 1,
+      "C": 2
+     },
+     "g": {
+      "elysia": 1
+     }
+    },
+    {
+     "t": "Quây quần với gia đình, về thăm ông bà bố mẹ…",
+     "s": {
+      "A": 1
+     },
+     "g": {
+      "sakura": 1,
+      "kalpas": 1
+     }
+    }
+   ],
+   "multi": 2
+  },
+  {
+   "id": 3,
+   "set": 1,
+   "w": 1,
+   "text": "Sắp có buổi hẹn quan trọng, bạn sẽ chải chuốt ra sao?",
+   "ans": [
+    {
+     "t": "Chuẩn bị từ sớm, tắm gội đều không thể thiếu, phải thật đẹp và phong cách!",
+     "s": {
+      "B": 1,
+      "F": 1
+     },
+     "g": {
+      "elysia": 2
+     }
+    },
+    {
+     "t": "Gọn gàng sạch sẽ, ăn mặc khá lịch sự",
+     "s": {},
+     "g": {
+      "hua": 1,
+      "sakura": 1
+     }
+    },
+    {
+     "t": "Ít để ý, thoải mái là chính",
+     "s": {
+      "B": -1
+     },
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "set": 1,
+   "w": 1,
+   "text": "Bạn đang làm dở một việc sáng tạo (vẽ, viết, làm đồ thủ công…) thì hết hứng. Bạn sẽ:",
+   "ans": [
+    {
+     "t": "Bỏ đó, khi nào hứng thì làm tiếp",
+     "s": {
+      "B": -2,
+      "F": 1
+     },
+     "g": {
+      "villv": 2
+     }
+    },
+    {
+     "t": "Ép mình làm phải xong mới thôi",
+     "s": {
+      "B": 2
+     },
+     "g": {}
+    },
+    {
+     "t": "Hít thở, đi dạo chút, tìm cách \"reset\" để lấy hứng làm tiếp",
+     "s": {
+      "F": 1
+     },
+     "g": {
+      "villv": 1
+     }
+    },
+    {
+     "t": "Tôi ít khi làm việc sáng tạo",
+     "s": {
+      "F": -2
+     },
+     "g": {
+      "hua": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "set": 1,
+   "w": 1,
+   "text": "Trong buổi họp nhóm, mọi người không ai chịu ai cả, không chốt được gì. Bạn sẽ:",
+   "ans": [
+    {
+     "t": "Đứng ra chốt phương án và phân việc bằng phương pháp riêng như bỏ phiếu hay phân tích lợi hại",
+     "s": {
+      "D": 2,
+      "G": 1
+     },
+     "g": {
+      "kevin": 2
+     }
+    },
+    {
+     "t": "Lắng nghe, tìm điểm chung rồi gợi ý nhẹ",
+     "s": {
+      "A": 1,
+      "D": 1
+     },
+     "g": {}
+    },
+    {
+     "t": "Im lặng chờ ai đó chốt, \"tôi sao cũng được\"",
+     "s": {
+      "D": -2,
+      "G": -1
+     },
+     "g": {}
+    },
+    {
+     "t": "Đùa một câu cho không khí dịu lại",
+     "s": {
+      "A": 1,
+      "C": 1
+     },
+     "g": {
+      "kevin": 1,
+      "elysia": 1,
+      "villv": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "set": 1,
+   "w": 1,
+   "text": "Lúc rảnh, bạn có hay tìm hiểu một thứ gì đó hoàn toàn không liên quan đến công việc không?",
+   "ans": [
+    {
+     "t": "Rất hay, thích học đủ thứ",
+     "s": {
+      "B": 1
+     },
+     "g": {
+      "su": 2
+     }
+    },
+    {
+     "t": "Thỉnh thoảng",
+     "s": {
+      "F": 1,
+      "B": -1
+     },
+     "g": {}
+    },
+    {
+     "t": "Rất ít, rảnh là nghỉ",
+     "s": {
+      "B": -1
+     },
+     "g": {
+      "sakura": 1
+     }
+    },
+    {
+     "t": "Không, tôi thích làm cái gì đó bằng tay hơn",
+     "s": {
+      "F": 1
+     },
+     "g": {
+      "kalpas": 1,
+      "villv": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "set": 1,
+   "w": 1,
+   "text": "Một đứa trẻ lạ đang khóc ngoài đường, xung quanh không thấy người lớn nào, và cũng không có ai định quan tâm. Bạn sẽ:",
+   "ans": [
+    {
+     "t": "Lại hỏi han, dỗ dành",
+     "s": {
+      "A": 2,
+      "H": 1
+     },
+     "g": {
+      "kosma": 1,
+      "elysia": 1,
+      "aponia": 1
+     }
+    },
+    {
+     "t": "Tìm người lớn hoặc nhân viên, cảnh sát gần đó tới giúp",
+     "s": {
+      "A": 1
+     },
+     "g": {
+      "eden": 1
+     }
+    },
+    {
+     "t": "Đứng xa quan sát, nếu cần mới can thiệp, chỉ để đảm bảo kẻ xấu không thể làm gì",
+     "s": {
+      "A": -1,
+      "D": 1
+     },
+     "g": {
+      "kevin": 1,
+      "su": 1
+     }
+    },
+    {
+     "t": "Đi tiếp, chuyện này có người khác lo, chẳng phải việc của tôi",
+     "s": {
+      "A": -2
+     },
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "set": 1,
+   "w": 1,
+   "text": "Bạn bất ngờ trúng số được một khoản tiền khổng lồ. Bạn sẽ:",
+   "ans": [
+    {
+     "t": "Mua ngay những thứ thật đẹp mà mình mê đã lâu, dù chẳng có ích gì",
+     "s": {
+      "E": 1,
+      "F": 1
+     },
+     "g": {
+      "elysia": 2
+     }
+    },
+    {
+     "t": "Thiện nguyện",
+     "s": {
+      "A": 1,
+      "E": 1,
+      "H": 1
+     },
+     "g": {
+      "eden": 1
+     }
+    },
+    {
+     "t": "Chia cho bạn bè, người thân cùng tận hưởng",
+     "s": {
+      "A": 1,
+      "H": 1
+     },
+     "g": {
+      "eden": 2,
+      "kevin": 1
+     }
+    },
+    {
+     "t": "Đầu tư vào dụng cụ, linh kiện để chế tạo hay thử nghiệm thứ mới",
+     "s": {
+      "B": 1,
+      "F": 1
+     },
+     "g": {
+      "villv": 2
+     }
+    },
+    {
+     "t": "Mua sách, khoá học để học thêm điều mình tò mò",
+     "s": {
+      "B": 1
+     },
+     "g": {
+      "su": 2
+     }
+    },
+    {
+     "t": "Mua đồ chơi, đồ ăn vặt, mấy thứ lấp lánh khiến mình vui ngay",
+     "s": {
+      "B": -1,
+      "C": 1
+     },
+     "g": {
+      "pardo": 2,
+      "griseo": 1
+     }
+    },
+    {
+     "t": "Cất đi để dành lúc cần",
+     "s": {
+      "B": 1,
+      "E": -1
+     },
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "set": 1,
+   "w": 1,
+   "text": "Hồi nhỏ, lúc ở một mình bạn thường làm gì nhất?",
+   "ans": [
+    {
+     "t": "Vẽ vời, tô màu, tưởng tượng ra cả một thế giới riêng",
+     "s": {
+      "C": -1,
+      "E": 1,
+      "F": 2
+     },
+     "g": {
+      "griseo": 2
+     }
+    },
+    {
+     "t": "Đọc truyện tranh hoặc xem phim hoạt hình, mơ mình sẽ trở thành siêu anh hùng cứu thế giới",
+     "s": {
+      "C": -1,
+      "E": 2
+     },
+     "g": {
+      "kosma": 2
+     }
+    },
+    {
+     "t": "Chạy nhảy nghịch ngợm cho tới khi bị gọi về",
+     "s": {
+      "B": -1,
+      "C": 1
+     },
+     "g": {
+      "pardo": 1
+     }
+    },
+    {
+     "t": "Tháo lắp đồ đạc xem chúng hoạt động như thế nào",
+     "s": {
+      "B": 1,
+      "F": 1
+     },
+     "g": {
+      "villv": 1,
+      "mobius": 1
+     }
+    },
+    {
+     "t": "Phụ việc nhà, chăm em hoặc chăm thú cưng",
+     "s": {
+      "A": 1,
+      "B": 1
+     },
+     "g": {
+      "kalpas": 1,
+      "sakura": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "set": 1,
+   "w": 1,
+   "text": "Một người thân của bạn làm một thứ gì đó khiến bạn thấy không vui. Bạn sẽ:",
+   "ans": [
+    {
+     "t": "Nói thẳng với họ, không vòng vo",
+     "s": {
+      "A": -1,
+      "D": 1
+     },
+     "g": {
+      "hua": 2
+     }
+    },
+    {
+     "t": "Nhẹ nhàng nói cho họ biết, nhưng nhất quyết giữ nguyên tắc, sau đó vẫn lo lắng cho họ như thường",
+     "s": {
+      "A": 1,
+      "B": 2,
+      "D": 1
+     },
+     "g": {
+      "aponia": 2
+     }
+    },
+    {
+     "t": "Không thể hiện, ngầm dỗi, nhưng vẫn lặng lẽ chuẩn bị đồ ăn, thứ họ cần",
+     "s": {
+      "A": 1,
+      "C": -1
+     },
+     "g": {
+      "sakura": 2,
+      "kalpas": 1
+     }
+    },
+    {
+     "t": "Nói nửa đùa nửa thật để họ tự nhận ra",
+     "s": {
+      "C": 1
+     },
+     "g": {
+      "pardo": 1,
+      "kevin": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "set": 1,
+   "w": 1,
+   "text": "Một người bạn của bạn đang rất buồn. Bạn thấy nên làm gì?",
+   "ans": [
+    {
+     "t": "Nói vài lời ấm áp, động viên, khen họ thật nhiều",
+     "s": {
+      "A": 2,
+      "C": 1
+     },
+     "g": {
+      "elysia": 2
+     }
+    },
+    {
+     "t": "Làm trò ngớ ngẩn, nhảy nhót cho họ bật cười",
+     "s": {
+      "B": -1,
+      "C": 2
+     },
+     "g": {
+      "pardo": 2
+     }
+    },
+    {
+     "t": "Im lặng ở bên, đưa món ăn ngon để phục hồi tâm trạng",
+     "s": {
+      "A": 1,
+      "C": -1
+     },
+     "g": {
+      "kalpas": 1
+     }
+    },
+    {
+     "t": "Nhẹ nhàng phân tích để họ thấy vấn đề và cách tháo gỡ nếu họ cần",
+     "s": {
+      "D": 1,
+      "E": -1
+     },
+     "g": {
+      "su": 2
+     }
+    },
+    {
+     "t": "Rủ họ ra ngoài đi dạo, ngắm cảnh đẹp, nói chuyện linh tinh cho khuây khoả",
+     "s": {
+      "E": 1,
+      "F": 1
+     },
+     "g": {
+      "eden": 1,
+      "griseo": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "set": 1,
+   "w": 1,
+   "text": "Bạn có thích bày trò, biểu diễn, trêu chọc, đùa với người khác không?",
+   "ans": [
+    {
+     "t": "Có, thích gây bất ngờ, kiểu ảo thuật hay chọc ghẹo vô hại",
+     "s": {
+      "C": 2,
+      "F": 1
+     },
+     "g": {
+      "villv": 2
+     }
+    },
+    {
+     "t": "Chỉ cho người thân xem, chứ với người lạ thấy mình lố quá",
+     "s": {
+      "C": -1,
+      "G": -1
+     },
+     "g": {
+      "villv": 1
+     }
+    },
+    {
+     "t": "Thích làm người cầm trịch, để cả nhóm cùng vui",
+     "s": {
+      "C": 2,
+      "D": 1
+     },
+     "g": {
+      "kevin": 1,
+      "elysia": 1
+     }
+    },
+    {
+     "t": "Không, tôi không thích làm tâm điểm",
+     "s": {
+      "C": -2
+     },
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "set": 1,
+   "w": 1,
+   "text": "Cả nhóm đi ăn thường ai sẽ trả bill trước:",
+   "ans": [
+    {
+     "t": "Giành trả hết, miễn mọi người vui là được, sau đó họ muốn chia thì chia không thì coi như tôi bao",
+     "s": {
+      "A": 1,
+      "H": 1
+     },
+     "g": {
+      "eden": 2
+     }
+    },
+    {
+     "t": "Chia đều cho công bằng",
+     "s": {
+      "B": 1
+     },
+     "g": {}
+    },
+    {
+     "t": "Ai ăn gì trả nấy",
+     "s": {
+      "B": 1,
+      "H": -1
+     },
+     "g": {}
+    },
+    {
+     "t": "Trả giùm trước, tính lại sau, nhưng sẽ nhắc nếu họ quên",
+     "s": {
+      "D": 1
+     },
+     "g": {}
+    },
+    {
+     "t": "Tìm cách để người khác trả, mình đỡ tốn",
+     "s": {
+      "D": 1,
+      "H": -2
+     },
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "set": 1,
+   "w": 1,
+   "text": "Một ngày hoàn hảo với bạn là:",
+   "ans": [
+    {
+     "t": "Mọi thứ đúng giờ, vận hành chuẩn mực, ai cũng được bình yên, êm ả trôi qua",
+     "s": {
+      "A": 1,
+      "B": 2,
+      "C": -1
+     },
+     "g": {
+      "aponia": 2
+     }
+    },
+    {
+     "t": "Học thêm một điều mới, hoặc giúp ai đó hiểu ra điều gì đó",
+     "s": {
+      "A": 1,
+      "B": 1
+     },
+     "g": {
+      "su": 2
+     }
+    },
+    {
+     "t": "Ra ngoài quan sát, tìm cảm hứng từ mọi thứ bên ngoài",
+     "s": {
+      "C": -1,
+      "F": 2
+     },
+     "g": {
+      "griseo": 2
+     }
+    },
+    {
+     "t": "Ăn ngon, ngủ nướng, chơi với chó mèo, không cần phải làm gì khác",
+     "s": {
+      "B": -1
+     },
+     "g": {
+      "pardo": 1
+     }
+    },
+    {
+     "t": "Mọi kế hoạch đã sắp xếp đều diễn ra thuận lợi",
+     "s": {
+      "A": -1,
+      "B": 1,
+      "D": 2
+     },
+     "g": {
+      "mobius": 2
+     }
+    },
+    {
+     "t": "Cả nhà quây quần ăn tối sau khi công việc cả ngày được hoàn thành",
+     "s": {
+      "A": 1,
+      "B": 1
+     },
+     "g": {
+      "sakura": 1,
+      "kalpas": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "set": 1,
+   "w": 1,
+   "text": "Trên xe buýt, một người lạ dột nhiên ôm bụng, mặt tái mét đi. Bạn sẽ:",
+   "ans": [
+    {
+     "t": "Quan sát triệu chứng, thăm hỏi, rồi gọi hỗ trợ hoặc cấp cứu nếu cần",
+     "s": {
+      "A": 1,
+      "D": 1
+     },
+     "g": {
+      "su": 2
+     }
+    },
+    {
+     "t": "Ở bên cạnh thăm hỏi và chăm sóc trực tiếp xem có dịu đi không",
+     "s": {
+      "A": 2
+     },
+     "g": {
+      "aponia": 1,
+      "elysia": 1
+     }
+    },
+    {
+     "t": "Báo tài xế hoặc người có chuyên môn gần đó rồi thôi",
+     "s": {
+      "B": 1,
+      "H": -1
+     },
+     "g": {}
+    },
+    {
+     "t": "Tôi không quan tâm",
+     "s": {
+      "D": -1
+     },
+     "g": {
+      "mobius": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "set": 1,
+   "w": 1,
+   "text": "Bạn gặp một loài hoa kỳ lạ chưa từng thấy. Phản ứng đầu tiên của bạn là:",
+   "ans": [
+    {
+     "t": "Lại gần chạm thử, ngửi thử, để xem “cái này là gì?”",
+     "s": {
+      "D": -1,
+      "E": 1,
+      "G": -1
+     },
+     "g": {
+      "griseo": 2
+     }
+    },
+    {
+     "t": "Đứng ngắm thật lâu, nghĩ xem nó đẹp ở chỗ nào, nên mang về không, đặt ở đâu",
+     "s": {
+      "F": 2,
+      "G": 1
+     },
+     "g": {
+      "eden": 2
+     }
+    },
+    {
+     "t": "Tìm hiểu cấu tạo, xem nó có mấy cánh, mùi hương toả ra từ đâu,...",
+     "s": {
+      "B": 1
+     },
+     "g": {
+      "villv": 1
+     }
+    },
+    {
+     "t": "Kể ngay cho bạn bè để cùng xem, mang về cho họ",
+     "s": {
+      "C": 2
+     },
+     "g": {
+      "pardo": 1,
+      "elysia": 1
+     }
+    },
+    {
+     "t": "Không quan tâm",
+     "s": {
+      "B": 1,
+      "E": -1
+     },
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "set": 1,
+   "w": 1,
+   "text": "Bạn tổ chức một buổi gặp mặt bạn bè. Điều bạn chăm chút nhất là:",
+   "ans": [
+    {
+     "t": "Không gian, âm nhạc, ánh sáng, đẹp đến từng chi tiết",
+     "s": {
+      "C": 1,
+      "F": 2,
+      "G": 1
+     },
+     "g": {
+      "elysia": 2,
+      "eden": 2
+     }
+    },
+    {
+     "t": "Món ăn thật ngon để ai cũng no nê",
+     "s": {
+      "A": 1
+     },
+     "g": {
+      "kalpas": 1
+     }
+    },
+    {
+     "t": "Trò chơi, tiết mục để cả bọn cười không ngớt",
+     "s": {
+      "C": 2
+     },
+     "g": {
+      "pardo": 1,
+      "villv": 1,
+      "kevin": 1
+     }
+    },
+    {
+     "t": "Ai cũng thấy thoải mái",
+     "s": {
+      "A": 2
+     },
+     "g": {
+      "elysia": 1,
+      "su": 1
+     }
+    },
+    {
+     "t": "Nhẹ nhàng, vui vẻ, không đặt nặng, không áp lực thời gian hay tiến trình",
+     "s": {
+      "B": 2
+     },
+     "g": {
+      "aponia": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 18,
+   "set": 1,
+   "w": 1,
+   "text": "Bạn nghĩ gì về việc giữ hình tượng cá nhân?",
+   "ans": [
+    {
+     "t": "Luôn cố gắng là phiên bản tốt nhất kể cả khi không ai thấy hay bận tâm",
+     "s": {
+      "B": 1,
+      "F": 1,
+      "G": 1
+     },
+     "g": {
+      "elysia": 2
+     }
+    },
+    {
+     "t": "Đại đại đi, vui mới là quan trọng",
+     "s": {
+      "B": -1,
+      "C": 1
+     },
+     "g": {
+      "pardo": 2
+     }
+    },
+    {
+     "t": "Chỉ cần sống thật với chính mình là đủ",
+     "s": {
+      "G": 1
+     },
+     "g": {}
+    },
+    {
+     "t": "Tôi không bận tâm người khác nghĩ gì",
+     "s": {
+      "A": -1,
+      "G": 1
+     },
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": 19,
+   "set": 1,
+   "w": 1,
+   "text": "Với bạn bè, bạn hay:",
+   "ans": [
+    {
+     "t": "Nói những lời có cánh, khen họ, cổ vũ họ",
+     "s": {
+      "A": 2,
+      "C": 1
+     },
+     "g": {
+      "elysia": 2
+     }
+    },
+    {
+     "t": "Trêu chọc, bày trò cho vui",
+     "s": {
+      "B": -1,
+      "C": 1
+     },
+     "g": {
+      "pardo": 2
+     }
+    },
+    {
+     "t": "Có sao nói vậy",
+     "s": {
+      "B": 1
+     },
+     "g": {}
+    },
+    {
+     "t": "Ít nói ra, tôi không quen thể hiện tình cảm",
+     "s": {
+      "A": -1,
+      "C": -1
+     },
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": 20,
+   "set": 1,
+   "w": 1,
+   "text": "Bạn thể hiện sự quan tâm với người thân theo cách nào?",
+   "ans": [
+    {
+     "t": "Hành động hơn là lời nói",
+     "s": {
+      "A": 1,
+      "D": 1
+     },
+     "g": {
+      "kalpas": 2
+     }
+    },
+    {
+     "t": "Quan tâm chăm sóc, nhất là về vấn đề sức khoẻ",
+     "s": {
+      "A": 1,
+      "B": 1,
+      "D": -1
+     },
+     "g": {
+      "su": 2
+     }
+    },
+    {
+     "t": "Bày tỏ những lời yêu thương thật rõ ràng, không chút ngần ngại",
+     "s": {
+      "A": 2,
+      "C": 1
+     },
+     "g": {
+      "elysia": 1
+     }
+    },
+    {
+     "t": "Chăm sóc họ như con mình",
+     "s": {
+      "B": 2
+     },
+     "g": {
+      "aponia": 1,
+      "sakura": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 21,
+   "set": 1,
+   "w": 1,
+   "text": "Bạn được giao một nhiệm vụ mà không ai giải thích lý do hay cách làm. Bạn sẽ:",
+   "ans": [
+    {
+     "t": "Làm thôi, trách nhiệm là trách nhiệm",
+     "s": {
+      "B": 2,
+      "E": -1
+     },
+     "g": {
+      "hua": 2
+     }
+    },
+    {
+     "t": "Hỏi cho rõ lý do và nên làm thế nào rồi mới làm",
+     "s": {
+      "D": 1,
+      "B": 1
+     },
+     "g": {
+      "su": 1
+     }
+    },
+    {
+     "t": "Làm theo cách của mình, thấy hợp lý là được",
+     "s": {
+      "B": -1,
+      "D": 2
+     },
+     "g": {
+      "mobius": 1
+     }
+    },
+    {
+     "t": "Nhờ hội đồng quản trị tư vấn",
+     "s": {
+      "A": 1,
+      "C": 1
+     },
+     "g": {
+      "kevin": 1
+     }
+    },
+    {
+     "t": "Từ chối luôn",
+     "s": {
+      "A": -2,
+      "H": -1,
+      "D": 1
+     },
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": 22,
+   "set": 2,
+   "w": 1,
+   "text": "Trong đám cháy, người yêu bạn và một đứa bé xa lạ cùng bị kẹt. Bạn không thể xác định ai gần hơn. Bạn chọn:",
+   "ans": [
+    {
+     "t": "Tôi phải cứu được cả hai",
+     "s": {
+      "E": 2,
+      "G": 1,
+      "H": 1
+     },
+     "g": {
+      "kosma": 1
+     }
+    },
+    {
+     "t": "Người yêu",
+     "s": {
+      "A": 1,
+      "H": -1
+     },
+     "g": {}
+    },
+    {
+     "t": "Đứa bé",
+     "s": {
+      "E": 1,
+      "H": 2
+     },
+     "g": {}
+    },
+    {
+     "t": "Tôi không biết cứu hoả, để người có chuyên môn làm đi",
+     "s": {
+      "B": 1,
+      "E": -2,
+      "H": -1
+     },
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": 23,
+   "set": 2,
+   "w": 1,
+   "text": "Tiểu đội của bạn bị Herrscher truy đuổi, chẳng thấy ai đến cứu. Bạn có trong tay một thiết bị phát năng lượng có thể dùng một lần và sẽ thu hút Herrscher cực mạnh, sau đó nổ tung năng lượng honkai. Bạn…",
+   "ans": [
+    {
+     "t": "Lập tức tách ra khỏi đội và sẵn sàng hy sinh, chỉ cần mọi người bình an là được rồi",
+     "s": {
+      "G": 1,
+      "H": 2
+     },
+     "g": {
+      "kevin": 1,
+      "hua": 1,
+      "kosma": 1
+     }
+    },
+    {
+     "t": "Tôi không muốn đi, nhưng nếu đây là cách duy nhất và đợi thêm chút vẫn chẳng có ai đến cứu... thì sẽ đi",
+     "s": {
+      "A": 1,
+      "G": -1,
+      "H": 2
+     },
+     "g": {
+      "pardo": 2
+     }
+    },
+    {
+     "t": "Đề nghị tất cả bốc thăm cho công bằng",
+     "s": {
+      "B": 2
+     },
+     "g": {}
+    },
+    {
+     "t": "Để người có chức trách (đội trưởng) quyết định",
+     "s": {
+      "D": 1,
+      "E": -1,
+      "H": -1
+     },
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": 24,
+   "set": 2,
+   "w": 1,
+   "text": "Nhóm bạn lên kế hoạch thiện nguyện vùng cao, mang vật tư đến cho người dân ở đó nhưng gặp rất nhiều khó khăn. Sau vài lần thực hiện thì vốn ngày càng âm. Cả nhóm muốn bỏ cuộc. Bạn…",
+   "ans": [
+    {
+     "t": "Đồng ý bỏ, thực tế mới quan trọng",
+     "s": {
+      "D": 1,
+      "E": -2
+     },
+     "g": {}
+    },
+    {
+     "t": "Cố thuyết phục cả nhóm thử thêm một lần",
+     "s": {
+      "C": 1,
+      "D": 2,
+      "E": 1
+     },
+     "g": {
+      "kevin": 1
+     }
+    },
+    {
+     "t": "Tiếp tục một mình nếu cần",
+     "s": {
+      "E": 2,
+      "G": 1,
+      "H": 1
+     },
+     "g": {
+      "eden": 2
+     }
+    },
+    {
+     "t": "Dừng lại, nhưng giữ những gì đã làm như một kỷ niệm đẹp",
+     "s": {
+      "A": 1,
+      "E": -1,
+      "F": 1
+     },
+     "g": {
+      "kosma": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 25,
+   "set": 2,
+   "w": 1,
+   "text": "Một người nổi tiếng / có vai vế trong ngành nói rằng nhìn thấy tài năng tiềm ẩn của bạn và ngỏ ý muốn nâng đỡ bạn theo con đường của mình. Bạn…",
+   "ans": [
+    {
+     "t": "Lên luôn, thích thể hiện",
+     "s": {
+      "C": 2,
+      "F": 1,
+      "G": 2
+     },
+     "g": {
+      "elysia": 1,
+      "villv": 1
+     }
+    },
+    {
+     "t": "Lên, nhưng sợ bị nhận ra là mình chưa giỏi như người ta nghĩ",
+     "s": {
+      "C": 1,
+      "F": 1,
+      "G": -1
+     },
+     "g": {
+      "villv": 2
+     }
+    },
+    {
+     "t": "Chỉ lên khi đã tập đến mức hoàn hảo",
+     "s": {
+      "B": 2,
+      "G": -1
+     },
+     "g": {}
+    },
+    {
+     "t": "Từ chối, để người khác giỏi hơn lên, thấy mình chưa đủ tốt",
+     "s": {
+      "C": -1,
+      "G": -2
+     },
+     "g": {
+      "kosma": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 26,
+   "set": 2,
+   "w": 1,
+   "text": "Trên hai đường ray, một bên có 5 người, một bên có 1 người, tàu sắp đến và không thể dừng lại, chắc chắn phải có ai đó thiệt mạng. Không ai biết bạn đã gạt công tắc. Bạn…",
+   "ans": [
+    {
+     "t": "Không làm, dù hậu quả ra sao. Tuyến ban đầu như vậy thì cứ để nguyên, đó là số mệnh của người đó/họ",
+     "s": {
+      "A": 1,
+      "D": -1,
+      "E": 2
+     },
+     "g": {}
+    },
+    {
+     "t": "Chọn cứu 5 người, hi sinh 1 người",
+     "s": {
+      "A": -1,
+      "D": 2,
+      "E": -1,
+      "H": 2
+     },
+     "g": {
+      "kevin": 2
+     }
+    },
+    {
+     "t": "Chọn cứu 1 người nếu như đó là người quan trọng với mình",
+     "s": {
+      "A": -2,
+      "D": 2,
+      "H": -1
+     },
+     "g": {
+      "mobius": 2
+     }
+    },
+    {
+     "t": "Tìm cách vẹn toàn cả hai",
+     "s": {
+      "D": 1,
+      "E": 1,
+      "G": 1
+     },
+     "g": {
+      "kosma": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 27,
+   "set": 2,
+   "w": 1,
+   "text": "Tận thế ập đến, bạn chỉ được mang theo được một thùng đồ duy nhất để đến hầm trú ẩn. Bạn chọn…",
+   "ans": [
+    {
+     "t": "Lương thực và dụng cụ thiết yếu",
+     "s": {
+      "B": 1,
+      "E": -1,
+      "F": -1
+     },
+     "g": {
+      "mobius": 1
+     }
+    },
+    {
+     "t": "Thứ có giá trị tinh thần: ảnh gia đình, nhạc cụ, tranh,...",
+     "s": {
+      "A": 1,
+      "E": 1,
+      "F": 2
+     },
+     "g": {
+      "eden": 2,
+      "griseo": 1
+     }
+    },
+    {
+     "t": "Phân chia để có cả hai",
+     "s": {
+      "D": -1
+     },
+     "g": {}
+    },
+    {
+     "t": "Không cần gì cả, dành chỗ được mang theo cho người khác",
+     "s": {
+      "A": 1,
+      "H": 2
+     },
+     "g": {
+      "kevin": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 28,
+   "set": 2,
+   "w": 1,
+   "text": "Khi lớn lên, bạn có thấy rất nhiều điều mình nghĩ hồi nhỏ hoá ra chỉ đẹp trong suy nghĩ của mình?",
+   "ans": [
+    {
+     "t": "Vẫn tin tưởng vào những thứ tốt đẹp, và tiếp tục làm điều đúng đắn",
+     "s": {
+      "E": 2,
+      "G": 1
+     },
+     "g": {
+      "elysia": 1
+     }
+    },
+    {
+     "t": "Buồn bã, nhưng vẫn trân trọng những gì đã trải qua",
+     "s": {
+      "A": 1,
+      "E": -1
+     },
+     "g": {
+      "kosma": 2
+     }
+    },
+    {
+     "t": "Dẹp bỏ cái tôi, và nghiêm túc tìm hướng thực tế hơn",
+     "s": {
+      "D": 1,
+      "E": -2
+     },
+     "g": {
+      "villv": 1,
+      "mobius": 1
+     }
+    },
+    {
+     "t": "Thay đổi là điều cần thiết của cuộc sống, không thể ngoái lại quá nhiều",
+     "s": {
+      "C": -1,
+      "G": -1
+     },
+     "g": {
+      "kosma": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 29,
+   "set": 2,
+   "w": 1,
+   "text": "Bạn được giao trách nhiệm lead team và phụ trách dự án lớn, nhưng chẳng ai thật sự hiểu bạn đang gồng gánh những gì, áp lực ra sao. Bạn sẽ:",
+   "ans": [
+    {
+     "t": "Âm thầm chịu đựng, làm hết mọi thứ vì đó là bổn phận, không nói cùng ai",
+     "s": {
+      "B": 2,
+      "G": -1,
+      "H": 2
+     },
+     "g": {
+      "kevin": 1,
+      "hua": 2
+     }
+    },
+    {
+     "t": "Đặt deadline và quy trình rõ ràng, mọi người phải tuân theo",
+     "s": {
+      "A": 1,
+      "B": 2,
+      "D": 2
+     },
+     "g": {
+      "aponia": 2
+     }
+    },
+    {
+     "t": "Dành thời gian ngồi lại, họp, lắng nghe, giải quyết từng thứ để team làm tốt hơn",
+     "s": {
+      "A": 2,
+      "D": 1
+     },
+     "g": {
+      "sakura": 2
+     }
+    },
+    {
+     "t": "Pha trò, tạo dịp chia sẻ, kéo mọi người lại gần rồi cùng nhau tìm cách vượt qua",
+     "s": {
+      "A": 1,
+      "C": 2,
+      "H": 1
+     },
+     "g": {
+      "elysia": 2
+     }
+    }
+   ]
+  },
+  {
+   "id": 30,
+   "set": 2,
+   "w": 1,
+   "text": "Điều bạn sợ nhất là gì?",
+   "ans": [
+    {
+     "t": "Cái chết, sự nguy hiểm đến tính mạng",
+     "s": {
+      "G": -1
+     },
+     "g": {
+      "pardo": 2
+     }
+    },
+    {
+     "t": "Làm người khác thất vọng, không xứng với kỳ vọng",
+     "s": {
+      "B": 1,
+      "G": -1
+     },
+     "g": {
+      "villv": 1,
+      "hua": 1
+     }
+    },
+    {
+     "t": "Những điều đẹp đẽ bị lãng quên, mai một, nghệ thuật dần biến mất",
+     "s": {
+      "E": 1,
+      "F": 1
+     },
+     "g": {
+      "eden": 1,
+      "griseo": 1,
+      "kosma": 1
+     }
+    },
+    {
+     "t": "Mất đi người thân, mất ai đó rất quan trọng",
+     "s": {
+      "A": 1
+     },
+     "g": {
+      "kalpas": 1,
+      "sakura": 1
+     }
+    },
+    {
+     "t": "Chính mình biến thành một dáng vẻ tồi tệ mà mình không muốn",
+     "s": {
+      "E": 1,
+      "H": 1
+     },
+     "g": {
+      "kevin": 1
+     }
+    },
+    {
+     "t": "Tôi chẳng sợ gì cả",
+     "s": {
+      "G": 2
+     },
+     "g": {
+      "mobius": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 31,
+   "set": 2,
+   "w": 1,
+   "text": "Có kẻ điên đe dọa làm hại cả gia đình bạn. Bạn sẽ:",
+   "ans": [
+    {
+     "t": "Xử lý kẻ tạo ra vấn đề",
+     "s": {
+      "A": -1,
+      "D": 2
+     },
+     "g": {
+      "sakura": 2,
+      "mobius": 1
+     }
+    },
+    {
+     "t": "Bảo vệ họ bằng mọi giá, kể cả hy sinh bản thân",
+     "s": {
+      "H": 2
+     },
+     "g": {
+      "kevin": 1,
+      "hua": 1
+     }
+    },
+    {
+     "t": "Thương lượng, tìm cách hóa giải trong êm đẹp",
+     "s": {
+      "A": 1,
+      "D": -1
+     },
+     "g": {
+      "su": 1,
+      "aponia": 1
+     }
+    },
+    {
+     "t": "Báo cảnh sát, để cảnh sát lo",
+     "s": {
+      "F": -2
+     },
+     "g": {}
+    },
+    {
+     "t": "Đưa cả nhà rời khỏi nơi nguy hiểm trước",
+     "s": {
+      "A": 1,
+      "B": 1
+     },
+     "g": {
+      "kalpas": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": 32,
+   "set": 2,
+   "w": 1,
+   "text": "Bạn lỡ hứa một điều rất khó thực hiện. Bạn sẽ:",
+   "ans": [
+    {
+     "t": "Giữ lấy lời đã nói cho bằng được, dù phải chịu thiệt thòi",
+     "s": {
+      "B": 2,
+      "H": 1
+     },
+     "g": {
+      "kevin": 2,
+      "hua": 1
+     }
+    },
+    {
+     "t": "Nói thật, xin lỗi và đề nghị cách bù đắp lại",
+     "s": {
+      "A": 1,
+      "B": 1
+     },
+     "g": {}
+    },
+    {
+     "t": "Khéo léo né đi, hy vọng họ sẽ quên",
+     "s": {
+      "B": -1
+     },
+     "g": {
+      "pardo": 1
+     }
+    },
+    {
+     "t": "Lời hứa còn tùy thời điểm, hoàn cảnh đã khác thì khác",
+     "s": {
+      "B": -2,
+      "D": 1
+     },
+     "g": {
+      "mobius": 1
+     }
+    }
+   ]
+  }
+ ],
+ "sigMode": "norm",
+ "sigFloor": 8,
+ "tbGap": 8,
+ "tbUnit": 5,
+ "tiebreak": [
+  {
+   "id": "t1",
+   "pair": [
+    "eden",
+    "griseo"
+   ],
+   "text": "Bạn vừa vẽ xong một bức tranh. Tiếp theo bạn muốn làm gì với nó?",
+   "ans": [
+    {
+     "t": "Treo ở nơi trang trọng, mời mọi người đến thưởng thức",
+     "s": {},
+     "g": {
+      "eden": 1
+     }
+    },
+    {
+     "t": "Đưa ngay cho người đầu tiên gặp, xem họ có vui không",
+     "s": {},
+     "g": {
+      "griseo": 1
+     }
+    },
+    {
+     "t": "Cất đi, vẽ cho riêng mình xem thôi",
+     "s": {},
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": "t2",
+   "pair": [
+    "eden",
+    "griseo"
+   ],
+   "text": "Khi nghĩ về những ngày xưa đẹp đẽ đã qua, bạn thường:",
+   "ans": [
+    {
+     "t": "Thấy có chút tiếc nuối, lặng lẽ hoài niệm",
+     "s": {},
+     "g": {
+      "eden": 1
+     }
+    },
+    {
+     "t": "Hào hứng kể lại, nhưng rồi nghĩ ngay tới điều mới muốn thử",
+     "s": {},
+     "g": {
+      "griseo": 1
+     }
+    },
+    {
+     "t": "Ít khi nghĩ lại chuyện cũ",
+     "s": {},
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": "t3",
+   "pair": [
+    "eden",
+    "griseo"
+   ],
+   "text": "Bạn nghĩ sao về vấn đề tiền bạc?",
+   "ans": [
+    {
+     "t": "Chỉ là phương tiện thôi, vật ngoài thân, không thật sự đáng nhắc đến",
+     "s": {},
+     "g": {
+      "eden": 1
+     }
+    },
+    {
+     "t": "Không quan tâm lắm, đủ là được, dư thì chia sẻ",
+     "s": {},
+     "g": {
+      "griseo": 1
+     }
+    },
+    {
+     "t": "Cực kì quan trọng",
+     "s": {},
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": "t4",
+   "pair": [
+    "elysia",
+    "kevin"
+   ],
+   "text": "Điều bạn thấy khó nhất là:",
+   "ans": [
+    {
+     "t": "Phải đặt mục tiêu lên trên cảm xúc",
+     "s": {},
+     "g": {
+      "kevin": 1
+     }
+    },
+    {
+     "t": "Thấy ai đó gặp khó khăn lại không thể giúp đỡ",
+     "s": {},
+     "g": {
+      "elysia": 1
+     }
+    },
+    {
+     "t": "Để người khác thất vọng vì mình",
+     "s": {},
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": "t5",
+   "pair": [
+    "hua",
+    "kevin"
+   ],
+   "text": "Khi bầu không khí nhóm quá căng thẳng, bạn thường:",
+   "ans": [
+    {
+     "t": "Đùa một câu để cả nhóm bớt áp lực",
+     "s": {},
+     "g": {
+      "kevin": 1
+     }
+    },
+    {
+     "t": "Im lặng làm việc của mình",
+     "s": {},
+     "g": {
+      "hua": 1
+     }
+    },
+    {
+     "t": "Cáu gắt vì áp lực",
+     "s": {},
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": "t6",
+   "pair": [
+    "kalpas",
+    "su"
+   ],
+   "text": "Em gái bạn đang bị sốt. Bạn làm gì đầu tiên?",
+   "ans": [
+    {
+     "t": "Hỏi triệu chứng, đo nhiệt độ, xem cần dùng thuốc gì",
+     "s": {},
+     "g": {
+      "su": 1
+     }
+    },
+    {
+     "t": "Nấu ngay một nồi cháo ấm, để họ ăn cho lại sức",
+     "s": {},
+     "g": {
+      "kalpas": 1
+     }
+    },
+    {
+     "t": "Gọi người khác đến giúp",
+     "s": {},
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": "t7",
+   "pair": [
+    "kalpas",
+    "su"
+   ],
+   "text": "Có người khen bạn tốt bụng. Bạn đáp:",
+   "ans": [
+    {
+     "t": "Khiêm tốn cảm ơn, mỉm cười",
+     "s": {},
+     "g": {
+      "su": 1
+     }
+    },
+    {
+     "t": "Không nói gì, chỉ tiện tay thôi",
+     "s": {},
+     "g": {
+      "kalpas": 1
+     }
+    },
+    {
+     "t": "Thấy ngại, lảng đi chỗ khác",
+     "s": {},
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": "t8",
+   "pair": [
+    "hua",
+    "sakura"
+   ],
+   "text": "Khi có người trong nhóm làm hỏng việc, bạn:",
+   "ans": [
+    {
+     "t": "Nói thẳng một câu ngắn gọn rồi thôi để họ tự xem lại",
+     "s": {},
+     "g": {
+      "hua": 1
+     }
+    },
+    {
+     "t": "Nói cho họ biết, kèm phương án cải tiến hoặc trực tiếp chỉ lại họ",
+     "s": {},
+     "g": {
+      "sakura": 1
+     }
+    },
+    {
+     "t": "Cho qua, ai cũng có lúc sai",
+     "s": {},
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": "t9",
+   "pair": [
+    "hua",
+    "sakura"
+   ],
+   "text": "Điều quan trọng nhất với bạn là:",
+   "ans": [
+    {
+     "t": "Hoàn thành tốt phần việc của mình",
+     "s": {},
+     "g": {
+      "hua": 1
+     }
+    },
+    {
+     "t": "Bạn bè",
+     "s": {},
+     "g": {}
+    },
+    {
+     "t": "Gia đình",
+     "s": {},
+     "g": {
+      "sakura": 1
+     }
+    },
+    {
+     "t": "Được sống thoải mái, tự do",
+     "s": {},
+     "g": {}
+    },
+    {
+     "t": "Nhiều tiền",
+     "s": {},
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": "t10",
+   "pair": [
+    "kevin",
+    "sakura"
+   ],
+   "text": "Phải sa thải một người vì người đó quá tạ team. Bạn:",
+   "ans": [
+    {
+     "t": "Sa thải người đó, giúp đỡ tìm họ công việc phù hợp hơn",
+     "s": {},
+     "g": {
+      "kevin": 1
+     }
+    },
+    {
+     "t": "Chia sẻ thẳng thắn, vẫn sa thải họ, nhưng vẫn giúp họ được hưởng quyền lợi xứng đáng",
+     "s": {},
+     "g": {
+      "sakura": 1
+     }
+    },
+    {
+     "t": "Tìm người khác làm thay việc xấu để mình đóng vai sếp tốt",
+     "s": {},
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": "t11",
+   "pair": [
+    "aponia",
+    "sakura"
+   ],
+   "text": "Khi có người vi phạm quy tắc của nhóm, bạn:",
+   "ans": [
+    {
+     "t": "Giảng giải nhẹ nhàng, mong họ tự hiểu, nhưng vẫn giữ chắc diều luật",
+     "s": {},
+     "g": {
+      "aponia": 1
+     }
+    },
+    {
+     "t": "Xử phạt thẳng tay, lần 1 nhẹ nhàng, lần 2 cảnh cáo mạnh hơn",
+     "s": {},
+     "g": {
+      "sakura": 1
+     }
+    },
+    {
+     "t": "Bỏ qua cho yên chuyện",
+     "s": {},
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": "t12",
+   "pair": [
+    "griseo",
+    "villv"
+   ],
+   "text": "Bạn muốn làm một món đồ chơi tặng người khác. Bạn:",
+   "ans": [
+    {
+     "t": "Tự tay chế tạo cơ chế bên trong, giấu thêm một bất ngờ nhỏ",
+     "s": {},
+     "g": {
+      "villv": 1
+     }
+    },
+    {
+     "t": "Tự tay trang trí cho xinh",
+     "s": {},
+     "g": {
+      "griseo": 1
+     }
+    },
+    {
+     "t": "Mua đồ lắp ghép cho nhanh",
+     "s": {},
+     "g": {}
+    }
+   ]
+  },
+  {
+   "id": "t13",
+   "pair": [
+    "elysia",
+    "pardo"
+   ],
+   "text": "Mấy thứ lấp lánh với bạn là:",
+   "ans": [
+    {
+     "t": "Nhìn là mê, muốn nhặt về ngay!",
+     "s": {},
+     "g": {
+      "pardo": 1
+     }
+    },
+    {
+     "t": "Một phần để tô điểm, giúp mình trông thật hoàn hảo, có ít thì tinh tế hơn",
+     "s": {},
+     "g": {
+      "elysia": 1
+     }
+    },
+    {
+     "t": "Không quan tâm lắm",
+     "s": {},
+     "g": {}
+    },
+    {
+     "t": "Chói mắt, không thích",
+     "s": {},
+     "g": {}
+    }
+   ]
+  }
+ ]
+}
+</script>
+
+<script>
+function quizCalibrate(D0, opts) {
+  opts = opts || {};
+  var N = opts.N || 3000, AX = ["A", "B", "C", "D", "E", "F", "G", "H"];
+  var D = JSON.parse(JSON.stringify(D0, function (k, v) { return k.charAt(0) === "_" ? undefined : v; }));
+  var seed = 20261126;
+  function rnd() { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+  function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+  var Q = D.questions, C = D.characters;
+  var M = Q.map(function (q) { var m = {}; AX.forEach(function (a) { m[a] = q.ans.some(function (x) { return x.s && x.s[a]; }); }); return m; });
+  var mass = {};
+  C.forEach(function (c) { mass[c.id] = 0; });
+  Q.forEach(function (q) { C.forEach(function (c) { var mx = 0; q.ans.forEach(function (a) { mx = Math.max(mx, (a.g && a.g[c.id]) || 0); }); mass[c.id] += mx; }); });
+  function sigBonus(id, raw) {
+    if (D.sigMode === "norm") { var m = Math.max(mass[id] || 0, D.sigFloor || 8); return D.sigCap * Math.min(1, raw / m); }
+    return Math.min(D.sigCap, raw * D.sigUnit);
+  }
+  function sim(x, c, w) { var s = 0, m = 0, i; for (i = 0; i < 8; i++) { s += w[i] * (x[i] - c[i]) * (x[i] - c[i]); m += w[i] * 16; } return 100 * (1 - Math.sqrt(s) / Math.sqrt(m)); }
+  function shuffled(n) { var a = [], i; for (i = 0; i < n; i++) a.push(i); for (i = n - 1; i > 0; i--) { var j = Math.floor(rnd() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+
+  var plays = [], p, nC = C.length;
+  for (p = 0; p < N; p++) {
+    var num = {}, den = {}, sig = {};
+    AX.forEach(function (a) { num[a] = 0; den[a] = 0; });
+    Q.forEach(function (q, qi) {
+      if (!q.ans.length) return;
+      var k = q.multi > 1 ? 1 + Math.floor(rnd() * Math.min(q.multi, q.ans.length)) : 1;
+      var picks = shuffled(q.ans.length).slice(0, k), d = {};
+      picks.forEach(function (i) {
+        var a = q.ans[i], z;
+        for (z in (a.s || {})) d[z] = (d[z] || 0) + a.s[z] / k;
+        for (z in (a.g || {})) sig[z] = (sig[z] || 0) + a.g[z] / k;
+      });
+      AX.forEach(function (a) { if (!M[qi][a]) return; num[a] += (d[a] || 0) * q.w; den[a] += q.w; });
+    });
+    var V = AX.map(function (a) { return den[a] > 0 ? clamp(3 + D.gain * num[a] / den[a], 1, 5) : 3; });
+    var flat = Math.max.apply(null, V.map(function (v) { return Math.abs(v - 3); })) < D.flatRange;
+    var base = C.map(function (ch) {
+      var best = -1e9;
+      ch.phases.forEach(function (ph) { best = Math.max(best, sim(V, ph.v, ch.w)); });
+      return best + sigBonus(ch.id, sig[ch.id] || 0);
+    });
+    plays.push({ base: base, flat: flat });
+  }
+
+  var bias = C.map(function () { return 0; }), it, ITER = 300;
+  for (it = 0; it < ITER; it++) {
+    var cnt = C.map(function () { return 0; }), tot = 0;
+    plays.forEach(function (pl) {
+      if (pl.flat) return;
+      var bi = 0, bv = -1e9;
+      pl.base.forEach(function (b, i) { var v = b + bias[i]; if (v > bv) { bv = v; bi = i; } });
+      cnt[bi]++; tot++;
+    });
+    var lr = 80 - 65 * it / ITER;
+    bias = bias.map(function (b, i) { return b + lr * (1 / nC - cnt[i] / Math.max(1, tot)); });
+  }
+  var mxb = Math.max.apply(null, bias);
+  bias = bias.map(function (b) { return b - mxb; });
+
+  var tops = [], flatN = 0;
+  plays.forEach(function (pl) {
+    if (pl.flat) { flatN++; return; }
+    tops.push(clamp(Math.max.apply(null, pl.base.map(function (b, i) { return b + bias[i]; })), 0, 100));
+  });
+  tops.sort(function (a, b) { return a - b; });
+  var unkTarget = opts.unknown == null ? 0.08 : opts.unknown;
+  var kIdx = Math.max(0, Math.min(tops.length - 1, Math.round(unkTarget * N) - flatN));
+  var T = tops.length ? tops[kIdx] : 0;
+
+  var share = {}, unk = 0, tb = 0, gap = D.tbGap == null ? 8 : D.tbGap, pairs = {};
+  (D.tiebreak || []).forEach(function (q) { if (q.pair && q.pair[0] && q.pair[1]) pairs[[q.pair[0], q.pair[1]].sort().join("|")] = 1; });
+  C.forEach(function (c) { share[c.id] = 0; });
+  plays.forEach(function (pl) {
+    var sc = pl.base.map(function (b, i) { return { i: i, s: clamp(b + bias[i], 0, 100) }; }).sort(function (a, b) { return b.s - a.s; });
+    if (pl.flat || sc[0].s < T) { unk++; return; }
+    share[C[sc[0].i].id]++;
+    if (sc[0].s - sc[1].s <= gap && pairs[[C[sc[0].i].id, C[sc[1].i].id].sort().join("|")]) tb++;
+  });
+  var calBias = {};
+  C.forEach(function (c, i) { calBias[c.id] = Math.round(bias[i] * 10) / 10; });
+  var outShare = {};
+  C.forEach(function (c) { outShare[c.id] = share[c.id] / N; });
+  return { calibration: { bias: calBias, T: Math.round(T * 10) / 10 }, stats: { N: N, share: outShare, unknown: unk / N, tiebreak: tb / N } };
+}
+if (typeof module !== "undefined" && module.exports) module.exports = quizCalibrate;
+
+</script>
+
+<script>
+(function () {
+  var SRC = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+  var DATA_RE = new RegExp("(<scr" + "ipt id=\"quiz-data\"[^>]*>)([\\s\\S]*?)(</scr" + "ipt>)");
+  var S = normalize(JSON.parse(document.getElementById("quiz-data").textContent));
+  var AXK = ["A", "B", "C", "D", "E", "F", "G", "H"];
+  var dirty = false, tab = "q", qSet = "all", qSearch = "";
+  var root = document.getElementById("app"), statEl = document.getElementById("stat");
+  var TABS = [["q", "Câu hỏi"], ["t", "Câu phụ"], ["c", "Nhân vật"], ["s", "Cài đặt"], ["k", "Thống kê & kiểm tra"]];
+
+  function normalize(d) {
+    d.axes = d.axes || AXK.map(function (k) { return { k: k, lo: "", hi: "" }; });
+    d.setNames = d.setNames || { "1": "Phần 1", "2": "Phần 2" };
+    (d.questions = d.questions || []).forEach(function (q) { q.ans = q.ans || []; q.ans.forEach(function (a) { a.s = a.s || {}; a.g = a.g || {}; }); });
+    (d.tiebreak = d.tiebreak || []).forEach(function (q) { q.pair = q.pair || ["", ""]; q.ans = q.ans || []; q.ans.forEach(function (a) { a.s = {}; a.g = a.g || {}; }); });
+    return d;
+  }
+  function el(t, p, k) {
+    var e = document.createElement(t), n, v;
+    if (p) for (n in p) {
+      v = p[n]; if (v == null || v === false) continue;
+      if (n === "class") e.className = v;
+      else if (n === "text") e.textContent = v;
+      else if (n === "value" || n === "selected" || n === "checked" || n === "disabled") e[n] = v;
+      else if (n.slice(0, 2) === "on") e[n] = v;
+      else e.setAttribute(n, v === true ? "" : v);
+    }
+    (k || []).forEach(function (c) { if (c != null) e.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return e;
+  }
+  function btn(txt, title, fn, cls) { return el("button", { type: "button", text: txt, title: title, class: cls || "", onclick: fn }); }
+  function mark() { dirty = true; stat(); }
+  function stat() { statEl.textContent = dirty ? "Có thay đổi chưa lưu" : "Đã lưu"; statEl.className = "stat" + (dirty ? " dirty" : ""); }
+  function axLab(k) { var a = S.axes.filter(function (x) { return x.k === k; })[0]; return a ? a.lo + " ↔ " + a.hi : k; }
+  function axTip(k) { var a = S.axes.filter(function (x) { return x.k === k; })[0]; return a ? k + ": " + a.lo + " ↔ " + a.hi : k; }
+  function cname(id) { var c = S.characters.filter(function (x) { return x.id === id; })[0]; return c ? c.name : id; }
+  function move(arr, i, d) { var j = i + d; if (j < 0 || j >= arr.length) return false; arr.splice(j, 0, arr.splice(i, 1)[0]); return true; }
+  function render() {
+    var y = window.scrollY;
+    var tb = document.getElementById("tabs"); tb.textContent = "";
+    TABS.forEach(function (t) { tb.appendChild(el("button", { type: "button", class: tab === t[0] ? "on" : "", text: t[1], onclick: function () { tab = t[0]; render(); window.scrollTo(0, 0); } })); });
+    root.textContent = "";
+    root.appendChild({ q: viewQ, t: viewT, c: viewC, s: viewS, k: viewK }[tab]());
+    window.scrollTo(0, y);
+  }
+
+  /* ---------- chips & answers ---------- */
+  function chipBox(a) {
+    var box = el("div", { class: "chips" });
+    function draw() {
+      box.textContent = "";
+      box.appendChild(el("span", { class: "muted", text: "Điểm cho nhân vật:" }));
+      Object.keys(a.g).forEach(function (id) {
+        var sel = el("select", { title: "Nhân vật" }, S.characters.map(function (c) {
+          if (c.id !== id && a.g[c.id]) return null;
+          return el("option", { value: c.id, text: c.name, selected: c.id === id });
+        }));
+        sel.onchange = function () { var v = a.g[id]; delete a.g[id]; a.g[sel.value] = v; mark(); draw(); };
+        var n = el("select", { title: "Điểm cho nhân vật" }, [1, 2, 3, 4].map(function (v) { return el("option", { value: v, text: "+" + v, selected: a.g[id] === v }); }));
+        n.onchange = function () { a.g[id] = +n.value; mark(); };
+        box.appendChild(el("span", { class: "chip" }, [sel, n, btn("×", "Bỏ", function () { delete a.g[id]; mark(); draw(); }, "x")]));
+      });
+      var free = S.characters.filter(function (c) { return !a.g[c.id]; })[0];
+      if (free) box.appendChild(btn("+ nhân vật", "Thêm điểm cho một nhân vật", function () { a.g[free.id] = 1; mark(); draw(); }, "add"));
+    }
+    draw(); return box;
+  }
+  function axSel(a, k) {
+    var cur = (a.s && a.s[k]) || 0;
+    var sel = el("select", { title: axTip(k), class: cur ? "on" : "" }, ["", "-2", "-1", "+1", "+2"].map(function (o) {
+      return el("option", { value: o.replace("+", ""), text: o, selected: o === "" ? cur === 0 : +o === cur });
+    }));
+    sel.onchange = function () { var v = parseInt(sel.value, 10) || 0; if (v) a.s[k] = v; else delete a.s[k]; sel.className = v ? "on" : ""; mark(); };
+    return el("label", { class: "axc", title: axTip(k) }, [el("span", { text: axLab(k) }), sel]);
+  }
+  function ansRows(arr, kind, onStruct) {
+    var wrap = el("div");
+    arr.forEach(function (a, i) {
+      var t = el("textarea", { rows: 2, value: a.t, placeholder: "Nội dung đáp án" });
+      t.oninput = function () { a.t = t.value; mark(); };
+      var row = el("div", { class: "ans" }, [el("div", { class: "ahead" }, [
+        el("span", { class: "idx", text: String(i + 1) }), t,
+        el("div", { class: "btns" }, [
+          btn("↑", "Lên", function () { if (move(arr, i, -1)) { mark(); onStruct(); } }),
+          btn("↓", "Xuống", function () { if (move(arr, i, 1)) { mark(); onStruct(); } }),
+          btn("✕", "Xóa đáp án", function () { if (confirm("Xóa đáp án này?")) { arr.splice(i, 1); mark(); onStruct(); } })])])]);
+      if (kind === "main") row.appendChild(el("div", { class: "axes" }, AXK.map(function (k) { return axSel(a, k); })));
+      row.appendChild(chipBox(a));
+      wrap.appendChild(row);
+    });
+    wrap.appendChild(btn("+ Thêm đáp án", "", function () { arr.push({ t: "", s: {}, g: {} }); mark(); onStruct(); }, "sec"));
+    return wrap;
+  }
+  function noScore(a) { return !Object.keys(a.s || {}).length && !Object.keys(a.g || {}).length; }
+
+  /* ---------- questions ---------- */
+  function viewQ() {
+    var w = el("div");
+    w.appendChild(el("div", { class: "legend" }, [el("div", {}, [el("b", { text: "Cách chấm: " }), "mỗi đáp án có 8 ô xổ xuống, mỗi ô là một trục tính cách có hai đầu (ví dụ “Lạnh lùng ↔ Ấm áp”). Chọn -2, -1 để nghiêng về đầu bên trái, +1, +2 để nghiêng về đầu bên phải, để trống là 0. Dòng “Điểm cho nhân vật” bên dưới là điểm cộng thẳng cho nhân vật đó."])]));
+    var list = el("div"), cnt = el("span", { class: "muted" });
+    var setSel = el("select", {}, [el("option", { value: "all", text: "Tất cả các phần", selected: qSet === "all" })].concat(["1", "2"].map(function (k) { return el("option", { value: k, text: S.setNames[k] || ("Phần " + k), selected: qSet === k }); })));
+    setSel.onchange = function () { qSet = setSel.value; draw(); };
+    var search = el("input", { type: "text", placeholder: "Tìm câu hỏi hoặc đáp án…", value: qSearch });
+    search.oninput = function () { qSearch = search.value; draw(); };
+    var bar = el("div", { class: "bar" }, [setSel, search, cnt, el("span", { class: "sp" }),
+      btn("Mở hết", "", function () { S.questions.forEach(function (q) { q._open = true; }); draw(); }, "sec"),
+      btn("Thu hết", "", function () { S.questions.forEach(function (q) { q._open = false; }); draw(); }, "sec"),
+      btn("+ Thêm câu hỏi", "", function () {
+        S.questions.push({ id: 0, set: qSet === "2" ? 2 : 1, w: 1, text: "", ans: [{ t: "", s: {}, g: {} }, { t: "", s: {}, g: {} }], _open: true });
+        mark(); draw(); window.scrollTo(0, document.body.scrollHeight);
+      }, "pri")]);
+    w.appendChild(bar); w.appendChild(list);
+    function match(q) {
+      if (qSet !== "all" && String(q.set) !== qSet) return false;
+      if (!qSearch) return true;
+      var s = qSearch.toLowerCase();
+      return q.text.toLowerCase().indexOf(s) > -1 || q.ans.some(function (a) { return a.t.toLowerCase().indexOf(s) > -1; });
+    }
+    function draw() {
+      list.textContent = ""; var shown = 0;
+      S.questions.forEach(function (q, qi) { if (match(q)) { shown++; list.appendChild(qCard(q, qi, draw)); } });
+      cnt.textContent = shown + "/" + S.questions.length + " câu";
+    }
+    draw(); return w;
+  }
+  function qCard(q, qi, redraw) {
+    var d = el("details", { class: "card" });
+    d.open = !!q._open;
+    d.addEventListener("toggle", function () { q._open = d.open; });
+    var sum = el("span", { class: "sum", text: q.text || "(chưa có nội dung)" });
+    var badge = el("span", { class: "badge" });
+    function upd() {
+      var ns = q.ans.filter(noScore).length;
+      badge.className = "badge" + (ns ? " warn" : "");
+      badge.textContent = (S.setNames[q.set] || "Phần " + q.set) + " · " + q.ans.length + " đáp án" + (ns ? " · " + ns + " chưa có điểm" : "");
+    }
+    upd();
+    d.appendChild(el("summary", {}, [el("span", { class: "num", text: "Câu " + (qi + 1) }), sum, badge]));
+    var text = el("textarea", { rows: 2, value: q.text, placeholder: "Nội dung câu hỏi" });
+    text.oninput = function () { q.text = text.value; sum.textContent = q.text || "(chưa có nội dung)"; mark(); };
+    var setS = el("select", {}, ["1", "2"].map(function (k) { return el("option", { value: k, text: S.setNames[k] || "Phần " + k, selected: String(q.set) === k }); }));
+    setS.onchange = function () { q.set = +setS.value; upd(); mark(); };
+    var wI = el("input", { type: "number", step: "0.1", min: "0", value: q.w });
+    wI.oninput = function () { q.w = parseFloat(wI.value) || 0; mark(); };
+    var mS = el("select", {}, [1, 2, 3, 4].map(function (v) { return el("option", { value: v, text: v === 1 ? "1 (chọn một)" : "Tối đa " + v, selected: (q.multi || 1) === v }); }));
+    mS.onchange = function () { if (+mS.value > 1) q.multi = +mS.value; else delete q.multi; mark(); };
+    var body = el("div", { class: "body" }, [
+      el("div", { class: "fields" }, [
+        el("label", { class: "grow" }, ["Câu hỏi", text]),
+        el("label", {}, ["Phần", setS]), el("label", {}, ["Trọng số", wI]), el("label", {}, ["Cách chọn", mS])]),
+      ansRows(q.ans, "main", function () { redraw(); }),
+      el("div", { class: "fields" }, [
+        btn("↑ Lên", "", function () { if (move(S.questions, qi, -1)) { mark(); render(); } }, "sec"),
+        btn("↓ Xuống", "", function () { if (move(S.questions, qi, 1)) { mark(); render(); } }, "sec"),
+        btn("Nhân bản", "", function () { var c = JSON.parse(JSON.stringify(q)); c._open = true; S.questions.splice(qi + 1, 0, c); mark(); render(); }, "sec"),
+        btn("Xóa câu này", "", function () { if (confirm("Xóa cả câu hỏi này?")) { S.questions.splice(qi, 1); mark(); render(); } }, "sec")])]);
+    d.appendChild(body);
+    return d;
+  }
+
+  /* ---------- tiebreak ---------- */
+  function viewT() {
+    var w = el("div");
+    w.appendChild(el("p", { class: "muted", text: "Câu phụ chỉ hiện khi top 1 và top 2 của người chơi sát nhau và đúng là cặp nhân vật được chọn ở đây. Câu phụ không có điểm trục, chỉ có điểm cho nhân vật. Đáp án để trống điểm là đáp án trung lập." }));
+    var list = el("div");
+    w.appendChild(el("div", { class: "bar" }, [el("span", { class: "muted", text: S.tiebreak.length + " câu phụ" }), el("span", { class: "sp" }),
+      btn("+ Thêm câu phụ", "", function () {
+        S.tiebreak.push({ id: "", pair: [S.characters[0].id, S.characters[1].id], text: "", ans: [{ t: "", s: {}, g: {} }, { t: "", s: {}, g: {} }], _open: true });
+        mark(); render(); window.scrollTo(0, document.body.scrollHeight);
+      }, "pri")]));
+    w.appendChild(list);
+    S.tiebreak.forEach(function (q, qi) {
+      var d = el("details", { class: "card" }); d.open = !!q._open;
+      d.addEventListener("toggle", function () { q._open = d.open; });
+      var sum = el("span", { class: "sum", text: q.text || "(chưa có nội dung)" });
+      var pairTxt = el("span", { class: "badge" });
+      function upd() { pairTxt.textContent = cname(q.pair[0]) + " / " + cname(q.pair[1]); }
+      upd();
+      d.appendChild(el("summary", {}, [el("span", { class: "num", text: "Phụ " + (qi + 1) }), sum, pairTxt]));
+      function pairSel(i) {
+        var s = el("select", {}, S.characters.map(function (c) { return el("option", { value: c.id, text: c.name, selected: q.pair[i] === c.id }); }));
+        s.onchange = function () { q.pair[i] = s.value; upd(); mark(); }; return s;
+      }
+      var text = el("textarea", { rows: 2, value: q.text });
+      text.oninput = function () { q.text = text.value; sum.textContent = q.text || "(chưa có nội dung)"; mark(); };
+      d.appendChild(el("div", { class: "body" }, [
+        el("div", { class: "fields" }, [el("label", {}, ["Cặp hay lẫn (1)", pairSel(0)]), el("label", {}, ["Cặp hay lẫn (2)", pairSel(1)]), el("label", { class: "grow" }, ["Câu hỏi", text])]),
+        ansRows(q.ans, "tb", function () { render(); }),
+        el("div", { class: "fields" }, [
+          btn("↑ Lên", "", function () { if (move(S.tiebreak, qi, -1)) { mark(); render(); } }, "sec"),
+          btn("↓ Xuống", "", function () { if (move(S.tiebreak, qi, 1)) { mark(); render(); } }, "sec"),
+          btn("Xóa câu này", "", function () { if (confirm("Xóa câu phụ này?")) { S.tiebreak.splice(qi, 1); mark(); render(); } }, "sec")])]));
+      list.appendChild(d);
+    });
+    return w;
+  }
+
+  /* ---------- characters ---------- */
+  function viewC() {
+    var w = el("div");
+    w.appendChild(el("p", { class: "muted", text: "Vector A đến H của từng giai đoạn dùng thang 1 đến 5. Người chơi được so với mọi giai đoạn, giai đoạn nào gần nhất sẽ hiện ra. Trọng số trục: 1 là bình thường, 0 là bỏ qua trục đó khi so với nhân vật này, lớn hơn 1 là trục đó quan trọng hơn." }));
+    S.characters.forEach(function (c) {
+      var d = el("details", { class: "card" }); d.open = !!c._open;
+      d.addEventListener("toggle", function () { c._open = d.open; });
+      d.appendChild(el("summary", {}, [el("span", { class: "num", text: c.name }), el("span", { class: "sum", text: c.id }), el("span", { class: "badge", text: c.phases.length + " giai đoạn" })]));
+      var name = el("input", { type: "text", value: c.name }); name.oninput = function () { c.name = name.value; mark(); };
+      var wv = el("div", { class: "vec" }, AXK.map(function (k, i) {
+        var inp = el("input", { type: "number", step: "0.5", min: "0", value: c.w[i] }); inp.oninput = function () { c.w[i] = parseFloat(inp.value) || 0; mark(); };
+        return el("label", { title: axTip(k) }, [axLab(k), inp]);
+      }));
+      var body = el("div", { class: "body" }, [el("div", { class: "fields" }, [el("label", {}, ["Tên hiển thị", name])]), el("div", { class: "muted", text: "Trọng số trục" }), wv]);
+      c.phases.forEach(function (p, pi) {
+        var lab = el("input", { type: "text", value: p.label, placeholder: "Tên giai đoạn (để trống nếu chỉ có một)" }); lab.oninput = function () { p.label = lab.value; mark(); };
+        var vec = el("div", { class: "vec" }, AXK.map(function (k, i) {
+          var inp = el("input", { type: "number", step: "0.5", min: "1", max: "5", value: p.v[i] }); inp.oninput = function () { p.v[i] = parseFloat(inp.value) || 1; mark(); };
+          return el("label", { title: axTip(k) }, [axLab(k), inp]);
+        }));
+        var desc = el("textarea", { rows: 3, value: p.desc, placeholder: "Mô tả hiện ở thẻ kết quả" }); desc.oninput = function () { p.desc = desc.value; mark(); };
+        var ph = el("div", { class: "phase" }, [el("div", { class: "fields" }, [el("label", { class: "grow" }, ["Giai đoạn " + (pi + 1), lab]),
+          c.phases.length > 1 ? btn("Xóa giai đoạn", "", function () { if (confirm("Xóa giai đoạn này?")) { c.phases.splice(pi, 1); mark(); render(); } }, "sec") : null]), vec, desc]);
+        body.appendChild(ph);
+      });
+      body.appendChild(btn("+ Thêm giai đoạn", "", function () { c._open = true; c.phases.push({ label: "", v: [3, 3, 3, 3, 3, 3, 3, 3], desc: "" }); mark(); render(); }, "sec"));
+      d.appendChild(body); w.appendChild(d);
+    });
+    return w;
+  }
+
+  /* ---------- settings ---------- */
+  function viewS() {
+    var w = el("div");
+    function field(label, hint, key, type, parent, k2) {
+      var o = parent || S, kk = k2 || key;
+      var inp = el("input", { type: type, step: type === "number" ? "any" : null, value: o[kk] == null ? "" : o[kk] });
+      inp.oninput = function () { o[kk] = type === "number" ? (parseFloat(inp.value) || 0) : inp.value; mark(); };
+      return el("label", {}, [label, inp, el("small", { text: hint })]);
+    }
+    w.appendChild(el("h2", { text: "Chung" }));
+    w.appendChild(el("div", { class: "grid2" }, [
+      field("Tiêu đề quiz", "", "title", "text"), field("Dòng phụ dưới tiêu đề", "", "subtitle", "text"),
+      field("Tên phần 1", "", "1", "text", S.setNames), field("Tên phần 2", "", "2", "text", S.setNames)]));
+    w.appendChild(el("h2", { text: "Cách tính điểm" }));
+    w.appendChild(el("div", { class: "grid2" }, [
+      field("gain", "Độ khuếch đại điểm trục (chênh lệch giữa các đáp án)", "gain", "number"),
+      field("flatRange", "Trả lời quá trung tính (mọi trục lệch dưới số này) thì ra trang “không giống ai”", "flatRange", "number"),
+      field("sigCap", "Điểm signature tối đa một nhân vật nhận được", "sigCap", "number"),
+      field("sigFloor", "Mốc sàn khi chuẩn hóa signature", "sigFloor", "number"),
+      field("tbGap", "Câu phụ hiện khi top 1 và top 2 chênh dưới số điểm này. Tăng thì nhiều người gặp câu phụ hơn", "tbGap", "number"),
+      field("tbUnit", "Điểm cộng cho mỗi đáp án câu phụ", "tbUnit", "number")]));
+    w.appendChild(el("h2", { text: "Tên 8 trục" }));
+    S.axes.forEach(function (a) {
+      var lo = el("input", { type: "text", value: a.lo, placeholder: "Điểm thấp" }), hi = el("input", { type: "text", value: a.hi, placeholder: "Điểm cao" });
+      lo.oninput = function () { a.lo = lo.value; mark(); }; hi.oninput = function () { a.hi = hi.value; mark(); };
+      w.appendChild(el("div", { class: "axrow" }, [el("b", { text: a.k }), lo, hi]));
+    });
+    w.appendChild(el("h2", { text: "Hiệu chỉnh tự động" }));
+    w.appendChild(el("p", { class: "muted", text: "Máy mô phỏng 3000 lượt chơi ngẫu nhiên để mỗi nhân vật có tỉ lệ trúng gần bằng nhau và “không giống ai” khoảng 8%. Bước này tự chạy mỗi lần bấm Lưu, nên bạn không cần tính tay. Bấm nút dưới đây nếu muốn xem thử kết quả trước khi lưu." }));
+    var out = el("div");
+    w.appendChild(btn("Tính thử hiệu chỉnh", "", function () {
+      out.textContent = "Đang tính…";
+      setTimeout(function () {
+        try {
+          var r = quizCalibrate(S); out.textContent = "";
+          var rows = S.characters.map(function (c) {
+            var p = r.stats.share[c.id] * 100;
+            return el("tr", {}, [el("td", { text: c.name }), el("td", {}, [el("span", { class: "barv", style: "width:" + Math.round(p * 12) + "px" }), " " + p.toFixed(1) + "%"]), el("td", { text: String(r.calibration.bias[c.id]) })]);
+          });
+          out.appendChild(el("table", { class: "t" }, [el("tr", {}, [el("th", { text: "Nhân vật" }), el("th", { text: "Tỉ lệ ra kết quả" }), el("th", { text: "bias" })])].concat(rows)));
+          out.appendChild(el("p", { text: "Không giống ai: " + (r.stats.unknown * 100).toFixed(1) + "% · Ngưỡng T: " + r.calibration.T + " · Người gặp câu phụ: " + (r.stats.tiebreak * 100).toFixed(1) + "%" }));
+        } catch (e) { out.textContent = "Lỗi: " + e.message; }
+      }, 30);
+    }, "sec"));
+    w.appendChild(out);
+    return w;
+  }
+
+  /* ---------- stats & checks ---------- */
+  function viewK() {
+    var w = el("div"), issues = [];
+    S.questions.forEach(function (q, qi) {
+      var n = "Câu " + (qi + 1);
+      if (!q.text.trim()) issues.push(n + ": chưa có nội dung câu hỏi.");
+      if (q.ans.length < 2) issues.push(n + ": chỉ có " + q.ans.length + " đáp án.");
+      if (q.multi && q.multi > q.ans.length) issues.push(n + ": cho chọn tối đa " + q.multi + " nhưng chỉ có " + q.ans.length + " đáp án.");
+      q.ans.forEach(function (a, ai) {
+        if (!a.t.trim()) issues.push(n + ", đáp án " + (ai + 1) + ": để trống chữ.");
+        else if (noScore(a)) issues.push(n + ", đáp án " + (ai + 1) + " (“" + a.t.slice(0, 40) + "”): chưa có điểm trục hay điểm nhân vật nào. Nếu cố ý trung lập thì bỏ qua.");
+      });
+    });
+    S.tiebreak.forEach(function (q, qi) {
+      var n = "Phụ " + (qi + 1);
+      if (q.pair[0] === q.pair[1]) issues.push(n + ": hai nhân vật trong cặp giống nhau.");
+      if (!q.text.trim()) issues.push(n + ": chưa có nội dung.");
+      if (q.ans.length < 2) issues.push(n + ": chỉ có " + q.ans.length + " đáp án.");
+    });
+    w.appendChild(el("h2", { text: "Kiểm tra" }));
+    if (!issues.length) w.appendChild(el("p", { class: "ok", text: "Không thấy vấn đề nào." }));
+    issues.forEach(function (s) { w.appendChild(el("div", { class: "issue", text: s })); });
+
+    var mass = {}, qn = {};
+    S.characters.forEach(function (c) { mass[c.id] = 0; qn[c.id] = 0; });
+    S.questions.forEach(function (q) {
+      S.characters.forEach(function (c) {
+        var mx = 0; q.ans.forEach(function (a) { mx = Math.max(mx, (a.g && a.g[c.id]) || 0); });
+        mass[c.id] += mx; if (mx) qn[c.id]++;
+      });
+    });
+    var maxMass = Math.max.apply(null, S.characters.map(function (c) { return mass[c.id]; })) || 1;
+    w.appendChild(el("h2", { text: "Điểm signature theo nhân vật" }));
+    w.appendChild(el("p", { class: "muted", text: "Tổng điểm cao nhất mỗi nhân vật có thể nhận ở các câu chính, và số câu có đáp án cho nhân vật đó. Chênh lệch lớn thì nhân vật ít điểm khó ra kết quả (hiệu chỉnh tự động bù được một phần)." }));
+    w.appendChild(el("table", { class: "t" }, [el("tr", {}, [el("th", { text: "Nhân vật" }), el("th", { text: "Tổng điểm" }), el("th", { text: "Số câu" })])].concat(
+      S.characters.map(function (c) { return el("tr", {}, [el("td", { text: c.name }), el("td", {}, [el("span", { class: "barv", style: "width:" + Math.round(mass[c.id] / maxMass * 160) + "px" }), " " + mass[c.id]]), el("td", { text: String(qn[c.id]) })]); }))));
+
+    var ac = {};
+    AXK.forEach(function (k) { ac[k] = 0; });
+    S.questions.forEach(function (q) { AXK.forEach(function (k) { if (q.ans.some(function (a) { return a.s && a.s[k]; })) ac[k]++; }); });
+    w.appendChild(el("h2", { text: "Số câu ảnh hưởng đến mỗi trục" }));
+    w.appendChild(el("table", { class: "t" }, [el("tr", {}, [el("th", { text: "Trục" }), el("th", { text: "Số câu" })])].concat(
+      AXK.map(function (k) { return el("tr", {}, [el("td", { text: axTip(k) }), el("td", {}, [el("span", { class: "barv", style: "width:" + ac[k] * 8 + "px" }), " " + ac[k]])]); }))));
+    return w;
+  }
+
+  /* ---------- save / open ---------- */
+  function dataJSON() {
+    return JSON.stringify(S, function (k, v) { return k.charAt(0) === "_" ? undefined : v; }, 1)
+      .replace(/\[\s+([-\d.,\s]+?)\s+\]/g, function (m, a) { return "[" + a.replace(/\s+/g, "") + "]"; })
+      .replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+  }
+  function save() {
+    try { S.calibration = quizCalibrate(S).calibration; }
+    catch (e) { alert("Không tính được hiệu chỉnh (" + e.message + "). Dữ liệu vẫn được lưu."); }
+    S.questions.forEach(function (q, i) { q.id = i + 1; });
+    S.tiebreak.forEach(function (q, i) { q.id = "t" + (i + 1); });
+    var json = dataJSON();
+    var html = SRC.replace(DATA_RE, function (m, a, b, c) { return a + "\n" + json + "\n" + c; });
+    var u = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    var a = el("a", { href: u, download: "data.html" }); document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(u); }, 3000);
+    dirty = false; stat();
+  }
+  document.getElementById("savebtn").onclick = save;
+  var fin = document.getElementById("openin");
+  document.getElementById("openbtn").onclick = function () { fin.click(); };
+  fin.onchange = function () {
+    var f = fin.files[0]; if (!f) return;
+    if (dirty && !confirm("Có thay đổi chưa lưu. Mở file khác sẽ mất chúng. Tiếp tục?")) { fin.value = ""; return; }
+    var r = new FileReader();
+    r.onload = function () {
+      try {
+        var t = String(r.result), data;
+        var m = DATA_RE.exec(t);
+        data = JSON.parse(m ? m[2] : t);
+        if (!data.questions || !data.characters) throw new Error("không phải file dữ liệu quiz");
+        S = normalize(data); dirty = false; stat(); render();
+      } catch (e) { alert("Không đọc được file: " + e.message); }
+      fin.value = "";
+    };
+    r.readAsText(f);
+  };
+  window.addEventListener("beforeunload", function (e) { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+  render();
+})();
+</script></body></html>
