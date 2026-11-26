@@ -303,14 +303,50 @@ window.QUIZ_MAIN = function () {
   // Mở thử từ máy (file://, localhost) thì chỉ đọc số, không cộng
   var LOCAL = location.protocol === "file:" || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
   // Tên bộ đếm: "views" = lượt xem, "results" = lượt ra kết quả, "kq-<id>" = lượt ra từng nhân vật (tên phải từ 3 ký tự)
-  function counter(action, key, cb) {
+  function counter(action, key, cb, fail) {
     var k = CT.counter || {}; if (k.enabled === false) return;
     if (LOCAL) action = "get";
     var base = String(k.url || COUNT_URL).replace(/\/$/, ""), ns = String(k.namespace || COUNT_NS).replace(/[^A-Za-z0-9_.-]/g, "-");
     fetch(base + "/" + action + "/" + encodeURIComponent(ns) + "/" + encodeURIComponent(key), { cache: "no-store" })
       .then(function (r) { if (action === "get" && r.status === 404) return { value: 0 }; return r.json(); }) // chưa ai đếm thì là 0
-      .then(function (j) { if (j && typeof j.value === "number") cb(j.value); })
-      .catch(function () {});
+      .then(function (j) { if (!j || typeof j.value !== "number") throw new Error("lỗi bộ đếm"); cb(j.value); })
+      .catch(function () { if (fail) fail(); });
+  }
+  // ===== Mỗi trình duyệt chỉ được tính một lần =====
+  // Nhớ riêng (bấm "Làm lại" không xóa): results = đã tính vào tổng, id = kết quả đang được tính, drop = các lượt trừ chưa gửi được.
+  // Bộ đếm chỉ cộng được, nên "trừ kết quả cũ" = cộng vào "bo-<id>". Số hiển thị = "kq-<id>" trừ "bo-<id>".
+  var TALLY_KEY = "quizCounted:" + location.pathname, tallyMem = null;
+  function tallyLoad() {
+    if (!tallyMem) { try { tallyMem = JSON.parse(localStorage.getItem(TALLY_KEY)); } catch (e) {} }
+    if (!tallyMem) tallyMem = { results: false, id: null, drop: [] };
+    return tallyMem;
+  }
+  function tallySave() { try { localStorage.setItem(TALLY_KEY, JSON.stringify(tallyMem)); } catch (e) {} }
+  function netCount(id, plus, cb) {
+    counter("get", "bo-" + id, function (minus) { cb(Math.max(plus - minus, tallyLoad().id === id ? 1 : 0)); });
+  }
+  function flushDrops(then) {
+    var m = tallyLoad(), list = m.drop.splice(0), left = list.length;
+    tallySave();
+    if (!left) return then();
+    var end = function () { if (!--left) then(); };
+    list.forEach(function (old) { counter("hit", "bo-" + old, end, function () { m.drop.push(old); tallySave(); end(); }); });
+  }
+  function tally(id, show) {
+    var read = function () { counter("get", "kq-" + id, function (n) { netCount(id, n, show); }); };
+    if (LOCAL || (CT.counter || {}).enabled === false) return read(); // chạy thử thì không ghi nhận gì
+    var m = tallyLoad();
+    if (!m.results) {
+      m.results = true; tallySave();
+      counter("hit", "results", function (n) { setStat("results", n); }, function () { m.results = false; tallySave(); });
+    }
+    if (m.id === id) return flushDrops(read); // ra lại kết quả cũ: không đổi gì
+    var old = m.id;
+    m.id = id; tallySave();
+    counter("hit", "kq-" + id, function (n) {
+      if (old) m.drop.push(old);
+      flushDrops(function () { netCount(id, n, show); });
+    }, function () { m.id = old; tallySave(); });
   }
   var stats = { views: null, results: null };
   function drawStats() {
@@ -372,7 +408,7 @@ window.QUIZ_MAIN = function () {
   function top() { window.scrollTo({ top: 0 }); }
 
   // ===== Lưu bài đang làm và kết quả (trong trình duyệt của người làm) =====
-  var done = null; // có giá trị khi đã ra kết quả: { tb: đáp án câu phụ, counted: đã gọi bộ đếm, n: số đếm }
+  var done = null; // có giá trị khi đã ra kết quả: { tb: đáp án câu phụ, counted: đã gọi bộ đếm }
   var SAVE_KEY = "quizSave:" + location.pathname;
   // Dấu nhận biết bộ câu hỏi: sửa câu hỏi/đáp án thì bản lưu cũ bị bỏ, tránh ghép nhầm đáp án
   function quizSig() {
@@ -604,7 +640,7 @@ window.QUIZ_MAIN = function () {
   }
 
   function showResult(R, tbPicks) {
-    var rec = done || { counted: false, n: null };
+    var rec = done || { counted: false };
     rec.tb = tbPicks || null; done = rec;
     var t0 = R.ranked[0];
     var id = R.unknown ? "none" : t0.id, pi = R.unknown ? 0 : t0.pi, ph = R.unknown ? null : ch(id).phases[pi];
@@ -631,17 +667,11 @@ window.QUIZ_MAIN = function () {
       cntEl.innerHTML = 'Đã có <b>' + n + '</b> người làm ra kết quả ' + (id === "none" ? 'không giống ai' : 'giống ' + esc(ch(id).name)) + ' (tính cả bạn).';
       cntEl.hidden = false;
     }
-    // Xem lại kết quả đã lưu thì không đếm thêm lần nữa, chỉ hiện số đã nhận lúc làm xong
-    var first = !rec.counted;
+    // Bản trước đã đếm lượt này rồi (có trong bài lưu) thì ghi nhận lại, không đếm nữa
+    var m = tallyLoad();
+    if (rec.counted && !m.id && !LOCAL) { m.results = true; m.id = id; tallySave(); }
     rec.counted = true; save();
-    if (first) {
-      counter("hit", "results", function (n) { setStat("results", n); });
-      counter("hit", "kq-" + id, function (n) {
-        rec.n = n; if (done === rec) save();
-        showCount(n);
-      });
-    }
-    else if (rec.n != null) showCount(rec.n);
+    tally(id, showCount);
     openCard(id, pi);
   }
 
