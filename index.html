@@ -50,6 +50,7 @@ button.ghost{text-align:center;color:var(--sub)}
 .phs b{font-weight:600}
 
 .ov{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));background:rgba(30,26,60,.55);backdrop-filter:blur(6px);overflow:auto;animation:fade .2s}
+.pop .hello{text-align:center;color:#fff;font-weight:600;font-size:16px;letter-spacing:.02em;margin:0 0 12px;text-shadow:0 2px 10px rgba(20,16,50,.55)}
 .pop{width:100%;max-width:330px;margin:auto;animation:rise .45s cubic-bezier(.2,.9,.3,1.2)}
 @keyframes fade{from{opacity:0}}
 @keyframes rise{from{opacity:0;transform:translateY(24px) scale(.92) rotate(-2deg)}}
@@ -79,7 +80,7 @@ button.ghost{text-align:center;color:var(--sub)}
 .stats{margin:10px 0 0;font-size:11.5px;text-align:center;opacity:.8}
 .stats b{font-weight:600}
 .say{display:flex;align-items:flex-start;gap:10px;margin:14px 2px 0}
-.stk{width:60px;height:60px;border-radius:50%;flex-shrink:0;background:hsl(var(--h) 70% 86%);border:3px solid #fff;display:grid;place-items:center;font-weight:700;font-size:24px;color:hsl(var(--h) 45% 35%);overflow:hidden;box-shadow:0 4px 12px rgba(20,16,50,.25)}
+.stk{width:60px;height:60px;border-radius:50%;flex-shrink:0;background:#fff;border:3px solid #fff;display:grid;place-items:center;font-weight:700;font-size:24px;color:hsl(var(--h) 45% 35%);overflow:hidden;box-shadow:0 4px 12px rgba(20,16,50,.25)}
 .stk img{width:100%;height:100%;object-fit:cover}
 .bub{position:relative;flex:1;min-height:60px;display:flex;align-items:center;background:#fff;color:#2b2848;border-radius:16px;padding:10px 14px;font-size:14.5px;line-height:1.55;box-shadow:0 4px 12px rgba(20,16,50,.2)}
 .bub:before{content:"";position:absolute;left:-7px;top:23px;border:solid transparent;border-width:7px 8px 7px 0;border-right-color:#fff}
@@ -559,6 +560,7 @@ window.QUIZ_MAIN = function () {
     var ov = document.createElement("div");
     ov.className = "ov"; ov.id = "ov"; ov.setAttribute("role", "dialog"); ov.setAttribute("aria-modal", "true"); ov.setAttribute("aria-label", "Thẻ " + nameOf(id));
     ov.innerHTML = '<div class="pop" style="--h:' + hue(id) + (cc ? ';--cc:' + cc : '') + '">' +
+      '<div class="hello">Bạn giống nhất với…</div>' +
       '<div class="tcard" style="' + cardTheme(cc, hue(id)) + '">' + FRAME + '<div class="num' + (numOf(id) === "0" ? " zero" : "") + '">' + esc(numOf(id)) + '</div><div class="art">' + (img ? '<img src="' + esc(img) + '" alt="' + esc(nameOf(id)) + '">' : '<span class="init">' + ini(id) + '</span>') + '</div>' +
       '<div class="plate"><div class="orn"><i></i></div><div class="nm" style="' + nmStyle(nameOf(id)) + '">' + esc(nameOf(id)) + '</div>' +  (bl ? '<div class="lb">' + esc(bl) + '</div>' : '') + '</div></div>' +
       '<div class="say"><div class="stk">' + (stk ? '<img src="' + esc(stk) + '" alt="">' : ini(id)) + '</div><div class="bub">' + esc(say) + '</div></div>' +
